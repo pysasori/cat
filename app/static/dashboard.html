@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PwCatBot · Головна</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">PW</span><div><h1>PwCatBot</h1><p>Центр керування лавками</p></div></div>
+    <nav class="topnav"><a class="active" href="/">Головна</a><a href="/strategies">Лавки (стратегії)</a><a href="/items">База предметів</a><a href="/windows">Вікна</a></nav>
+    <div id="statusPill" class="status idle"><i></i><span>готово</span></div>
+  </header>
+
+  <main class="dashboard-shell">
+    <section class="dashboard-heading">
+      <div><p class="eyebrow">ГОЛОВНА ПАНЕЛЬ</p><h1>Запуск і стан лавок</h1><p>Персонажі запускаються по одному через чергу. Їхні налаштування, стратегії та BAT зберігаються у розділі «Вікна».</p></div>
+      <div class="hero-actions"><button id="refreshDashboard" class="ghost">↻ Оновити</button><button id="startAll" class="primary">▶ Запустити лавки по черзі</button><button id="stopAll" class="danger">Стоп</button></div>
+    </section>
+
+    <section class="dashboard-summary">
+      <div class="metric"><span>Персонажі</span><b id="characterCount">0</b></div>
+      <div class="metric"><span>Готові до черги</span><b id="readyCount">0</b></div>
+      <div class="metric"><span>Загальні кошти</span><b id="totalFunds">—</b></div>
+      <div id="errorMetric" class="metric"><span>Помилки</span><b id="errorCount">0</b></div>
+    </section>
+
+    <section id="activeAlert" class="dashboard-alert" hidden></section>
+
+    <section class="panel queue-overview">
+      <div class="panel-heading"><div><p class="eyebrow">ПОСЛІДОВНИЙ ЗАПУСК</p><h2 id="queueTitle">Черга не запущена</h2><p class="queue-hint">Кожен наступний персонаж запускається лише після переходу попереднього в офлайн-лавку.</p></div><span id="queueCounter" class="state-badge ok">0 / 0</span></div>
+      <div id="queueProgress" class="queue-progress"><i></i></div>
+      <pre id="queueLog" class="log">Очікування…</pre>
+    </section>
+
+    <section class="dashboard-section-heading"><div><p class="eyebrow">ПЕРСОНАЖІ</p><h2>Лавки та останні результати</h2></div><a class="ghost settings-link" href="/windows">Налаштувати вікна →</a></section>
+    <section id="characterGrid" class="character-grid"></section>
+
+    <section class="panel">
+      <div class="panel-heading"><div><p class="eyebrow">ОСТАННЯ ОПЕРАЦІЯ</p><h2 id="jobTitle">Бот очікує</h2></div><button id="stopJob" class="danger">Зупинити поточну</button></div>
+      <div id="jobPreview" class="preview"></div>
+      <pre id="jobLog" class="log">Очікування…</pre>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div>
+  <script src="/static/dashboard.js?v=1"></script>
+</body>
+</html>

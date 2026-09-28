@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="uk">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PwCatBot · Вікна</title><link rel="stylesheet" href="/static/app.css"></head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">PW</span><div><h1>PwCatBot</h1><p>Персонажі, стратегії та BAT</p></div></div>
+    <nav class="topnav"><a href="/">Головна</a><a href="/strategies">Лавки (стратегії)</a><a href="/items">База предметів</a><a class="active" href="/windows">Вікна</a></nav>
+    <div class="status idle"><i></i><span id="pageStatus">готово</span></div>
+  </header>
+  <main class="admin-shell settings-shell">
+    <aside class="sidebar">
+      <div class="sidebar-title"><div><p class="eyebrow">КЛІЄНТИ PW</p><h2>Вікна</h2></div><button id="newCharacter" class="icon-button">+</button></div>
+      <div id="clientList" class="profile-list"></div>
+      <button id="refreshState" class="ghost wide sidebar-link">Оновити список</button>
+    </aside>
+    <section class="content">
+      <section class="panel client-hero">
+        <div><p class="eyebrow">ПЕРСОНАЖ / ЛАВКА</p><h2 id="clientTitle">Оберіть персонажа</h2><p id="clientSubtitle" class="muted">—</p></div>
+        <div class="hero-actions"><a class="ghost settings-link" href="/">До запуску →</a><button id="deleteCharacter" class="danger">Видалити</button></div>
+      </section>
+
+      <details class="panel timing-panel">
+        <summary><div><p class="eyebrow">СПІЛЬНІ НАЛАШТУВАННЯ</p><h2>Таймінги послідовного запуску</h2></div><span class="summary-hint">відкрити</span></summary>
+        <div class="queue-settings timing-settings">
+          <label>Блокування трейду після входу, сек.<input id="queueLoginDelay" type="number" min="0" max="180" step="1"></label>
+          <label>Очікування вікна, сек.<input id="queueWindowTimeout" type="number" min="10" max="600" step="5"></label>
+          <label>Очікування входу у світ, сек.<input id="queueGameTimeout" type="number" min="10" max="900" step="5"></label>
+          <label>Очікування закриття, сек.<input id="queueCloseTimeout" type="number" min="5" max="300" step="5"></label>
+          <button id="saveQueueSettings" class="ghost">Зберегти таймінги</button>
+        </div>
+      </details>
+
+      <section class="panel settings-grid-panel">
+        <div class="panel-heading"><div><p class="eyebrow">ПРИВ’ЯЗКА</p><h2>Персонаж і стратегія</h2></div><button id="detectState" class="secondary">Зчитати з гри</button></div>
+        <div class="settings-form-grid">
+          <label>Точний нік персонажа<input id="characterName"><small>Підставляється у BAT як role:НІК і перевіряється після входу</small></label>
+          <label>Назва лавки<input id="shopName"></label>
+          <label class="strategy-field">Стратегія персонажа<select id="scenario"></select><small>Набір лотів і правила розрахунку цін</small></label>
+          <label>Відкрите вікно<select id="detectedWindow"></select></label>
+        </div>
+        <div class="character-flags">
+          <label><input id="queueEnabled" type="checkbox"> Додати персонажа до черги</label>
+          <label><input id="offlineTrade" type="checkbox"> Після виставлення натиснути офлайн-торгівлю</label>
+        </div>
+        <div class="form-actions"><button id="saveCharacter" class="primary">Зберегти</button><button id="bindWindow" class="ghost">Прив’язати відкрите вікно</button></div>
+        <div id="detectedResult" class="detected-result">Ім’я та кошти ще не зчитувались.</div>
+      </section>
+
+      <section class="panel settings-grid-panel">
+        <div class="panel-heading"><div><p class="eyebrow">ОКРЕМИЙ BAT-ФАЙЛ</p><h2>Параметри запуску</h2></div><span id="passwordState" class="state-badge">пароль не задано</span></div>
+        <div class="settings-form-grid launcher-grid">
+          <label class="span-2">Папка element<input id="gameDir" placeholder="D:\Comeback136.pw\element"></label>
+          <label>Логін<input id="login" autocomplete="off"></label>
+          <label>Пароль<input id="password" type="password" autocomplete="new-password" placeholder="Залиште порожнім, щоб не змінювати"></label>
+          <label>Мітка d_title<input id="windowTitle" placeholder="Наприклад: cat-01"><small>Необов’язкова для пошуку: черга знаходить новий HWND автоматично</small></label>
+        </div>
+        <div class="form-actions"><button id="useDetectedPath" class="ghost">Взяти шлях із вибраного вікна</button><button id="saveLauncher" class="primary">Зберегти й створити BAT</button></div>
+        <div class="launcher-file"><span>Файл запуску</span><code id="launcherFile">ще не створено</code></div>
+        <p class="warning">BAT-файл зберігається тільки локально, але містить пароль відкритим текстом. Не надсилайте папку <code>data/launchers</code> іншим людям.</p>
+      </section>
+
+      <section class="finance-grid">
+        <div class="metric"><span>Вільні кошти</span><b id="freeFunds">—</b></div>
+        <div class="metric"><span>Лоти на продаж</span><b id="saleValue">—</b></div>
+        <div class="metric total"><span>Разом</span><b id="totalValue">—</b></div>
+      </section>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div><script src="/static/windows.js?v=4"></script>
+</body>
+</html>

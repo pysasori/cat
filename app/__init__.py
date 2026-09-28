@@ -1,0 +1,1 @@
+"""PwCatBot application package."""

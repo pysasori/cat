@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PwCatBot · Лавки (стратегії)</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">PW</span><div><h1>PwCatBot</h1><p>Лавки та правила цін</p></div></div>
+    <nav class="topnav"><a href="/">Головна</a><a class="active" href="/strategies">Лавки (стратегії)</a><a href="/items">База предметів</a><a href="/windows">Вікна</a></nav>
+    <div class="status idle"><i></i><span id="pageStatus">готово</span></div>
+  </header>
+
+  <main class="admin-shell strategy-shell">
+    <aside class="sidebar">
+      <div class="sidebar-title"><div><p class="eyebrow">ТОРГОВІ НАБОРИ</p><h2>Стратегії</h2></div><button id="newProfile" class="icon-button" title="Нова стратегія">+</button></div>
+      <div id="profileList" class="profile-list"></div>
+      <a class="ghost wide sidebar-link" href="/windows">Призначити персонажам →</a>
+    </aside>
+
+    <section class="content">
+      <section class="panel strategy-hero">
+        <div><p class="eyebrow">ЛАВКА (СТРАТЕГІЯ)</p><h2 id="strategyTitle">Оберіть стратегію</h2><p id="scenarioUsage" class="muted">—</p></div>
+        <div class="hero-actions"><button id="copyProfile" class="secondary">Копіювати</button><button id="deleteProfile" class="danger">Видалити</button></div>
+        <label class="strategy-name-field">Назва стратегії<input id="scenarioName" placeholder="Наприклад: Топ скуп / +3% продаж"></label>
+      </section>
+
+      <section class="panel items-panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">ПРЕДМЕТИ ТА ПРАВИЛА</p><h2>Товари стратегії <span id="entryCount" class="count">0</span></h2></div>
+          <div class="toolbar"><button id="refreshProfilePrices" class="ghost">↻ Оновити ціни</button><button id="openItemPicker" class="primary">+ Додати з бази</button></div>
+        </div>
+        <div class="filters">
+          <input id="entrySearch" type="search" placeholder="Пошук за назвою або item ID…">
+          <select id="entryFilter"><option value="all">Усі предмети</option><option value="active">Тільки активні</option><option value="sale">З продажем</option><option value="buy">Зі скупкою</option><option value="missing">Без ринкових цін</option></select>
+          <span id="visibleCount" class="muted"></span>
+        </div>
+        <div class="table-scroll entries-scroll">
+          <table class="data-table entries-table">
+            <thead><tr><th class="center">On</th><th>Предмет</th><th>Макс.</th><th>Продаж · база min</th><th>Скупка · база max</th><th></th></tr></thead>
+            <tbody id="profileEntries"></tbody>
+          </table>
+          <div id="emptyProfile" class="empty">У стратегії ще немає предметів.</div>
+        </div>
+        <p class="micro">Додатна поправка робить ціну конкурентнішою: продаж віднімає відсоток або суму від мінімальної ціни, а скупка додає їх до максимальної. Наприклад: продаж 100 з поправкою 5% = 95, скупка 100 = 105.</p>
+      </section>
+    </section>
+  </main>
+
+  <dialog id="itemPicker" class="picker-dialog">
+    <div class="dialog-heading"><div><p class="eyebrow">ЗАГАЛЬНА БАЗА</p><h2>Додати предмети у стратегію</h2></div><button id="closeItemPicker" class="icon-button">×</button></div>
+    <input id="pickerSearch" type="search" placeholder="Пошук за назвою або ComebackPW ID…" autofocus>
+    <div id="pickerResults" class="picker-results"></div>
+    <div class="dialog-actions"><span id="pickerHint" class="muted">Оберіть предмети</span><button id="addPickedItems" class="primary" disabled>Додати вибрані</button></div>
+  </dialog>
+
+  <div id="toast" class="toast"></div>
+  <script src="/static/strategies.js?v=1"></script>
+</body>
+</html>

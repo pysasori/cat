@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="uk">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PwCatBot · База предметів</title><link rel="stylesheet" href="/static/app.css"></head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">PW</span><div><h1>PwCatBot</h1><p>База предметів</p></div></div>
+    <nav class="topnav"><a href="/">Головна</a><a href="/strategies">Лавки (стратегії)</a><a class="active" href="/items">База предметів</a><a href="/windows">Вікна</a></nav>
+    <div class="status idle"><i></i><span id="pageStatus">готово</span></div>
+  </header>
+  <main class="page-shell">
+    <section class="page-heading"><div><p class="eyebrow">ЗАГАЛЬНИЙ ДОВІДНИК</p><h1>База предметів <span id="catalogCount" class="count">0</span></h1><p>Чисті іконки та ціни завантажуються з ComebackPW. Сценарії лише посилаються на цю базу.</p></div></section>
+    <section class="panel market-source-panel">
+      <div class="panel-heading"><div><p class="eyebrow">ДЖЕРЕЛО ЦІН</p><h2>Сторінка торгових лотів</h2></div><button id="saveMarketSettings" class="primary">Зберегти</button></div>
+      <div class="market-source-grid">
+        <label>Шаблон посилання<input id="marketUrlTemplate" placeholder="https://comeback.pw/cats/136/?item_id={item_id}"></label>
+        <label>Максимум сторінок на сторону<input id="marketMaxPages" type="number" min="1" max="100"></label>
+      </div>
+      <p class="micro">Залишайте <code>{item_id}</code> на місці ID предмета. Для кожного предмета бот окремо обходить <code>show=sell</code> і <code>show=buy</code>, змінюючи <code>page=1…N</code>, доки не зустріне порожню сторінку.</p>
+    </section>
+    <section class="panel">
+      <div class="catalog-tools catalog-tools-wide">
+        <input id="catalogSearch" type="search" placeholder="Пошук за назвою або item ID…">
+        <select id="catalogFilter"><option value="all">Усі предмети</option><option value="market">З ComebackPW ID</option><option value="missing">Без item ID</option></select>
+        <input id="marketImport" placeholder="ComebackPW item ID або посилання">
+        <button id="importMarket" class="primary">Імпортувати</button>
+      </div>
+      <div class="table-scroll catalog-page-scroll"><table class="data-table catalog-page-table"><thead><tr><th>Предмет</th><th>ComebackPW ID</th><th>Ліміт стека</th><th>Продаж min</th><th>Скупка max</th><th>Оновлено</th><th></th><th></th></tr></thead><tbody id="catalog"></tbody></table><div id="emptyCatalog" class="empty">База порожня.</div></div>
+    </section>
+    <section class="panel">
+      <div class="panel-heading"><div><p class="eyebrow">РУЧНЕ ДОДАВАННЯ</p><h2>Іконка з вікна гри</h2></div><button id="reloadFrame" class="ghost">Оновити кадр</button></div>
+      <div class="capture-grid">
+        <div><label class="capture-window-label">Джерело кадру<select id="captureWindow"></select></label><div id="frameWrap" class="frame-wrap"><img id="gameFrame" alt="Кадр гри"><div class="cursor-hint">Клацніть предмет у рюкзаку</div></div></div>
+        <div class="capture-form"><label>Назва предмета<input id="newName"></label><label>ComebackPW item ID, якщо відомий<input id="newMarketId" type="number" min="1"></label><label>Ліміт стека<input id="newStackLimit" type="number" min="1" value="100"></label><button id="pickIcon" class="primary">Вибрати іконку на кадрі</button><p id="pickState" class="micro">Якщо задано item ID, після додавання натисніть «Оновити» — іконка заміниться чистою версією із сайту.</p></div>
+      </div>
+    </section>
+  </main>
+  <div id="toast" class="toast"></div><script src="/static/items.js"></script>
+</body>
+</html>
