@@ -1,0 +1,113 @@
+[
+  {
+    "id": "8ffd268cd3d44322acd5aa6674c5b237",
+    "name": "Т2 / Т3",
+    "character_name": "Ellnalise",
+    "window_hwnd": 6685858,
+    "window_index": 0,
+    "shop_name": "20k / buy 500",
+    "entries": [
+      {
+        "item_id": "50d2888599af42cabc86e7782cad385b",
+        "enabled": true,
+        "sale_enabled": true,
+        "buy_enabled": true,
+        "max_owned": 50,
+        "sale_price_mode": "market",
+        "buy_price_mode": "market",
+        "sale_price": 20000,
+        "buy_price": 500,
+        "sale_adjustment": 0.0,
+        "buy_adjustment": 0.0
+      },
+      {
+        "item_id": "92572542eea5408a899fea1b7040b1c6",
+        "enabled": true,
+        "sale_enabled": true,
+        "buy_enabled": true,
+        "max_owned": 50,
+        "sale_price_mode": "market",
+        "buy_price_mode": "market",
+        "sale_price": 20000,
+        "buy_price": 500,
+        "sale_adjustment": 0.0,
+        "buy_adjustment": 0.0
+      },
+      {
+        "item_id": "f7f49d7d5a494927b6a55c2f99f6af5b",
+        "enabled": true,
+        "sale_enabled": true,
+        "buy_enabled": true,
+        "max_owned": 50,
+        "sale_price_mode": "market",
+        "buy_price_mode": "market",
+        "sale_price": 20000,
+        "buy_price": 500,
+        "sale_adjustment": 0.0,
+        "buy_adjustment": 0.0
+      },
+      {
+        "item_id": "b79c5822f76a434891d0e5f6d4f65a39",
+        "enabled": true,
+        "sale_enabled": true,
+        "buy_enabled": true,
+        "max_owned": 50,
+        "sale_price_mode": "market",
+        "buy_price_mode": "market",
+        "sale_price": 20000,
+        "buy_price": 500,
+        "sale_adjustment": 0.0,
+        "buy_adjustment": 0.0
+      },
+      {
+        "item_id": "08641585ffed4d5cb42b9fd0b62e9f42",
+        "enabled": true,
+        "sale_enabled": true,
+        "buy_enabled": true,
+        "max_owned": 50,
+        "sale_price_mode": "market",
+        "buy_price_mode": "market",
+        "sale_price": 20000,
+        "buy_price": 500,
+        "sale_adjustment": 0.0,
+        "buy_adjustment": 0.0
+      },
+      {
+        "item_id": "74c98dccd64d48419d5c9dbf4635b091",
+        "enabled": true,
+        "sale_enabled": true,
+        "buy_enabled": true,
+        "max_owned": 50,
+        "sale_price_mode": "market",
+        "buy_price_mode": "market",
+        "sale_price": 20000,
+        "buy_price": 500,
+        "sale_adjustment": 0.0,
+        "buy_adjustment": 0.0
+      }
+    ]
+  },
+  {
+    "id": "ee192a6453394f538c9356c95f088ee4",
+    "name": "Міражи",
+    "character_name": "",
+    "window_hwnd": null,
+    "window_index": 0,
+    "shop_name": "",
+    "entries": [
+      {
+        "item_id": "6968d6cb45294b21b5b4cb91302f987d",
+        "enabled": true,
+        "sale_enabled": true,
+        "buy_enabled": true,
+        "max_owned": 20,
+        "sale_price_mode": "market_percent",
+        "buy_price_mode": "market",
+        "sale_price": 20000,
+        "buy_price": 500,
+        "sale_adjustment": -10.0,
+        "buy_adjustment": 0.0
+      }
+    ]
+  }
+]

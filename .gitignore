@@ -3,7 +3,8 @@ __pycache__/
 .pytest_cache/
 *.pyc
 data/*.json
-data/icons/*.png
+!data/catalog.json
+!data/profiles.json
 data/launchers/*.bat
 artifacts/
 .env

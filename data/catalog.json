@@ -1,0 +1,82 @@
+[
+  {
+    "id": "50d2888599af42cabc86e7782cad385b",
+    "name": "Плоть призрака",
+    "icon_file": "76a95df611bd4a2eb452bee727213832.png",
+    "market_item_id": 8090,
+    "market_sell": 995,
+    "market_buy": 1000,
+    "market_updated_at": "2026-09-28T08:21:41.131033+00:00",
+    "stack_limit": 100
+  },
+  {
+    "id": "92572542eea5408a899fea1b7040b1c6",
+    "name": "Порошок элементаля",
+    "icon_file": "5999574b4e31424d8465775588f0e59f.png",
+    "market_item_id": 8092,
+    "market_sell": 1100,
+    "market_buy": 1000,
+    "market_updated_at": "2026-09-28T08:21:41.131033+00:00",
+    "stack_limit": 100
+  },
+  {
+    "id": "f7f49d7d5a494927b6a55c2f99f6af5b",
+    "name": "Мягкий мех",
+    "icon_file": "c14df0cb19674c22addb165930d2414b.png",
+    "market_item_id": 8094,
+    "market_sell": 830,
+    "market_buy": 600,
+    "market_updated_at": "2026-09-28T08:21:41.131033+00:00",
+    "stack_limit": 100
+  },
+  {
+    "id": "b79c5822f76a434891d0e5f6d4f65a39",
+    "name": "Усики",
+    "icon_file": "abb830db4f824eb5abc3b4f8ad3c5f19.png",
+    "market_item_id": 8095,
+    "market_sell": 830,
+    "market_buy": 700,
+    "market_updated_at": "2026-09-28T08:21:41.131033+00:00",
+    "stack_limit": 100
+  },
+  {
+    "id": "08641585ffed4d5cb42b9fd0b62e9f42",
+    "name": "Бивень",
+    "icon_file": "a8b79690bd854166b9fa0fce4cec2dbf.png",
+    "market_item_id": 8099,
+    "market_sell": 830,
+    "market_buy": 800,
+    "market_updated_at": "2026-09-28T08:21:41.131033+00:00",
+    "stack_limit": 100
+  },
+  {
+    "id": "74c98dccd64d48419d5c9dbf4635b091",
+    "name": "Тупой коготь",
+    "icon_file": "43792ebe9f5a4d8984d36d38a9afc806.png",
+    "market_item_id": 8105,
+    "market_sell": 11000,
+    "market_buy": 9000,
+    "market_updated_at": "2026-09-28T08:21:41.131033+00:00",
+    "stack_limit": 100
+  },
+  {
+    "id": "6968d6cb45294b21b5b4cb91302f987d",
+    "name": "Камень бессмертных",
+    "icon_file": "catalog-6968d6cb45294b21b5b4cb91302f987d.png",
+    "market_item_id": 11208,
+    "market_sell": 35000,
+    "market_buy": 35003,
+    "market_updated_at": "2026-09-28T14:21:43.253148+00:00",
+    "stack_limit": 100
+  },
+  {
+    "id": "0cac4bbea33b4fc1b5de102ad51abbaa",
+    "name": "Зеленая трава",
+    "icon_file": "catalog-0cac4bbea33b4fc1b5de102ad51abbaa.png",
+    "market_item_id": 9757,
+    "market_sell": 32000,
+    "market_buy": 20110,
+    "market_updated_at": "2026-09-28T19:16:38.461792+00:00",
+    "stack_limit": 100
+  }
+]
