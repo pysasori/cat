@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -316,16 +315,13 @@ def refresh_profile_market(profile_id: str) -> dict:
     quotes = {}
     icons = {}
     errors = []
-    with ThreadPoolExecutor(max_workers=min(6, len(wanted))) as pool:
-        pending = {pool.submit(fetch_bundle, item): item for item in wanted}
-        for future in as_completed(pending):
-            item = pending[future]
-            try:
-                quote, image = future.result()
-                quotes[item.id] = quote
-                icons[item.id] = image
-            except Exception as error:
-                errors.append({"item_id": item.id, "name": item.name, "error": str(error)})
+    for item in wanted:
+        try:
+            quote, image = fetch_bundle(item)
+            quotes[item.id] = quote
+            icons[item.id] = image
+        except Exception as error:
+            errors.append({"item_id": item.id, "name": item.name, "error": str(error)})
 
     timestamp = datetime.now(timezone.utc).isoformat()
     updated_items = []

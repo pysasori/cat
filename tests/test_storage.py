@@ -16,3 +16,7 @@ def test_repository_round_trip(tmp_path):
     assert repository.lots()[0].price == 456
     repository.delete_lot(lot.id)
     assert repository.lots() == []
+
+
+def test_old_market_page_setting_is_migrated_to_one():
+    assert AppConfig(market_max_pages=20).market_max_pages == 1

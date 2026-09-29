@@ -97,7 +97,7 @@ class AppConfig(BaseModel):
         min_length=12,
         max_length=1000,
     )
-    market_max_pages: int = Field(default=20, ge=1, le=100)
+    market_max_pages: int = Field(default=1, ge=1, le=1)
     queue_login_delay: float = Field(default=75.0, ge=0, le=180)
     queue_window_timeout: float = Field(default=120.0, ge=10, le=600)
     queue_game_timeout: float = Field(default=240.0, ge=10, le=900)
@@ -118,6 +118,13 @@ class AppConfig(BaseModel):
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ValueError("Потрібне повне HTTP(S)-посилання")
         return value
+
+    @field_validator("market_max_pages", mode="before")
+    @classmethod
+    def use_one_market_page_per_side(cls, value):
+        # Older configs used up to 20 pages. One best-offer page for sell and
+        # one for buy keeps a 16-item profile inside the client loading window.
+        return 1
 
 
 class Lot(BaseModel):

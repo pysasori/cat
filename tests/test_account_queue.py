@@ -18,10 +18,16 @@ class FakeShopRunner:
     def __init__(self, repository=None):
         self.started = []
         self.bound_hwnds = []
+        self.refreshed = []
+        self.refresh_flags = []
         self.repository = repository
 
-    def start(self, dry_run, profile_id=None, character_id=None):
+    def refresh_character_market(self, character_id):
+        self.refreshed.append(character_id)
+
+    def start(self, dry_run, profile_id=None, character_id=None, refresh_market=True):
         self.started.append(character_id)
+        self.refresh_flags.append(refresh_market)
         if self.repository is not None:
             character = next(item for item in self.repository.characters() if item.id == character_id)
             self.bound_hwnds.append(character.window_hwnd)
@@ -79,7 +85,9 @@ def test_account_queue_processes_characters_in_repository_order(tmp_path):
     queue._run([first.id, second.id])
 
     assert launcher.launched == [first.id, second.id]
+    assert shop.refreshed == [first.id, second.id]
     assert shop.started == [first.id, second.id]
+    assert shop.refresh_flags == [False, False]
     assert shop.bound_hwnds == [101, 202]
     assert [item.window_hwnd for item in repository.characters()] == [None, None]
     assert queue.snapshot().completed == 2

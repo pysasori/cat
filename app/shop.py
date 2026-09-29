@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 import time
 from math import ceil
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -212,6 +211,7 @@ class ShopRunner:
         dry_run: bool,
         profile_id: str | None = None,
         character_id: str | None = None,
+        refresh_market: bool = True,
     ) -> JobState:
         with self._lock:
             if self.state.running:
@@ -220,7 +220,7 @@ class ShopRunner:
             self._record_character_status(character_id, "running", "Запуск стратегії")
             self._thread = threading.Thread(
                 target=self._run_guarded,
-                args=(dry_run, profile_id, character_id),
+                args=(dry_run, profile_id, character_id, refresh_market),
                 daemon=True,
             )
             self._thread.start()
@@ -236,9 +236,10 @@ class ShopRunner:
         dry_run: bool,
         profile_id: str | None,
         character_id: str | None,
+        refresh_market: bool = True,
     ) -> None:
         try:
-            warnings = self._run(dry_run, profile_id, character_id)
+            warnings = self._run(dry_run, profile_id, character_id, refresh_market)
             self._check_stop()
             warning_message = "; ".join(warnings)
             self._set(
@@ -440,9 +441,10 @@ class ShopRunner:
         dry_run: bool,
         profile_id: str | None = None,
         character_id: str | None = None,
+        refresh_market: bool = True,
     ) -> list[str]:
         if profile_id or character_id:
-            return self._run_profile(dry_run, profile_id, character_id)
+            return self._run_profile(dry_run, profile_id, character_id, refresh_market=refresh_market)
         self._run_legacy(dry_run)
         return []
 
@@ -771,6 +773,8 @@ class ShopRunner:
         dry_run: bool,
         profile_id: str | None,
         character_id: str | None = None,
+        *,
+        refresh_market: bool = True,
     ) -> list[str]:
         character = None
         if character_id:
@@ -792,7 +796,8 @@ class ShopRunner:
             raise RuntimeError("У профілі немає увімкнених предметів")
 
         base = self.repository.config()
-        catalog = self._refresh_market_prices(entries, catalog, base)
+        if refresh_market:
+            catalog = self._refresh_market_prices(entries, catalog, base)
         entry_prices: dict[str, tuple[int | None, int | None]] = {}
         for entry in entries:
             item = catalog[entry.item_id]
@@ -1049,6 +1054,28 @@ class ShopRunner:
             self._log(f"Оцінка лавки: {total:,} монет")
         return warnings
 
+    def refresh_character_market(self, character_id: str) -> None:
+        """Refresh only the enabled items assigned to one character."""
+        character = next(
+            (item for item in self.repository.characters() if item.id == character_id),
+            None,
+        )
+        if character is None:
+            raise RuntimeError("Персонажа не знайдено")
+        profile = next(
+            (item for item in self.repository.profiles() if item.id == character.profile_id),
+            None,
+        )
+        if profile is None:
+            raise RuntimeError("Сценарій персонажа не знайдено")
+        catalog = {item.id: item for item in self.repository.catalog()}
+        entries = [
+            entry
+            for entry in profile.entries
+            if entry.enabled and entry.item_id in catalog
+        ]
+        self._refresh_market_prices(entries, catalog, self.repository.config())
+
     def _refresh_market_prices(
         self,
         entries: list[ProfileEntry],
@@ -1076,14 +1103,11 @@ class ShopRunner:
                 max_pages=config.market_max_pages,
             )
 
-        with ThreadPoolExecutor(max_workers=min(6, len(wanted))) as pool:
-            pending = {pool.submit(fetch, item): item for item in wanted}
-            for future in as_completed(pending):
-                item = pending[future]
-                try:
-                    quotes[item.id] = future.result()
-                except Exception as error:
-                    errors.append(f"{item.name}: {error}")
+        for item in wanted:
+            try:
+                quotes[item.id] = fetch(item)
+            except Exception as error:
+                errors.append(f"{item.name}: {error}")
 
         if errors:
             raise RuntimeError("Не вдалося оновити ринкові ціни: " + "; ".join(errors))

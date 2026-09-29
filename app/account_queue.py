@@ -237,6 +237,16 @@ class AccountQueue:
             self._log(f"{position}/{len(character_ids)} · запускаю {character.character_name}")
             existing = {window.hwnd for window in self.window_provider()}
             self.launcher.launch(character)
+            market_error: list[Exception] = []
+
+            def refresh_market() -> None:
+                try:
+                    self.shop_runner.refresh_character_market(character.id)
+                except Exception as error:
+                    market_error.append(error)
+
+            market_thread = threading.Thread(target=refresh_market, daemon=True)
+            market_thread.start()
             window = self._find_window(
                 character.window_title,
                 existing,
@@ -255,6 +265,12 @@ class AccountQueue:
             )
             self._wait(config.queue_login_delay)
 
+            while market_thread.is_alive():
+                self._check_stop()
+                market_thread.join(0.2)
+            if market_error:
+                raise market_error[0]
+
             self._set(stage="trading")
             self._log(f"{character.character_name}: виставляю лоти й офлайн-торгівлю")
             # Make the final queue stop check and child-job start atomic. Without
@@ -263,7 +279,7 @@ class AccountQueue:
             with self._lock:
                 if self.state.stop_requested:
                     raise InterruptedError
-                self.shop_runner.start(False, character_id=character.id)
+                self.shop_runner.start(False, character_id=character.id, refresh_market=False)
             self._wait_for_job()
 
             self._set(stage="offline_wait")

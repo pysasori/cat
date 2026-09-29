@@ -1,3 +1,5 @@
+from urllib.error import HTTPError
+
 from app import market
 from app.market import fetch_quote, parse_quote
 
@@ -51,6 +53,7 @@ def test_market_fetches_each_side_and_all_pages(monkeypatch):
         return Response(f'<img class="recent_search" data-name="Loot" src="/loot.png">{offers}')
 
     monkeypatch.setattr(market, "urlopen", fake_open)
+    monkeypatch.setattr(market, "REQUEST_INTERVAL_SECONDS", 0)
     quote = fetch_quote(
         77,
         url_template="https://prices.example.test/list?server=136&item_id={item_id}",
@@ -63,3 +66,47 @@ def test_market_fetches_each_side_and_all_pages(monkeypatch):
     assert all("server=136" in url and "item_id=77" in url for url in requested)
     assert any("show=sell" in url and "page=2" in url for url in requested)
     assert any("show=buy" in url and "page=2" in url for url in requested)
+
+
+def test_market_retries_temporary_forbidden_response(monkeypatch):
+    attempts = []
+    sleeps = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return None
+
+        def read(self):
+            return b"ok"
+
+    def fake_open(request, timeout):
+        attempts.append(request.full_url)
+        if len(attempts) == 1:
+            raise HTTPError(request.full_url, 403, "Forbidden", {}, None)
+        return Response()
+
+    monkeypatch.setattr(market, "urlopen", fake_open)
+    monkeypatch.setattr(market, "REQUEST_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(market.time, "sleep", sleeps.append)
+
+    payload = market._read_url(market.Request("https://example.test"), timeout=1)
+
+    assert payload == b"ok"
+    assert len(attempts) == 2
+    assert sleeps == [5.0]
+
+
+def test_market_requests_use_character_loading_time_budget(monkeypatch):
+    sleeps = []
+    moments = iter([10.0, 12.1875])
+    monkeypatch.setattr(market, "_last_request_at", 10.0)
+    monkeypatch.setattr(market.time, "monotonic", lambda: next(moments))
+    monkeypatch.setattr(market.time, "sleep", sleeps.append)
+
+    market._wait_for_request_slot()
+
+    assert sleeps == [2.1875]
+    assert market._last_request_at == 12.1875
