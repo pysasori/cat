@@ -1,6 +1,6 @@
 from PIL import Image
 
-from app.layout import TEMPLATES, geometry_for_frame, locate_bag, locate_shop
+from app.layout import TEMPLATES, geometry_for_client, geometry_for_frame, locate_bag, locate_shop
 from app.models import Geometry, Point
 
 
@@ -36,3 +36,16 @@ def test_geometry_follows_shop_and_bag_independently():
     assert moved.bag_grid.first == Point(x=763, y=749)
     # Modal dialogs are centred by PW and do not move with either panel.
     assert moved.dialog_accept == base.dialog_accept
+
+
+def test_geometry_supports_1280_by_720_client():
+    base = Geometry()
+    resized = geometry_for_client(base, 1280, 720)
+
+    assert (resized.client_width, resized.client_height) == (1280, 720)
+    assert resized.sale_grid == base.sale_grid
+    assert resized.bag_grid == base.bag_grid
+    assert resized.dialog_price == Point(x=715, y=631)
+    assert resized.dialog_quantity == Point(x=640, y=657)
+    assert resized.dialog_accept == Point(x=611, y=686)
+    assert resized.split_accept == Point(x=663, y=695)

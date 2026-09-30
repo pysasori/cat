@@ -13,6 +13,7 @@ from app.models import Geometry, Point
 TEMPLATES = Path(__file__).resolve().parent / "assets" / "templates"
 DEFAULT_SHOP_ANCHOR = Point(x=147, y=274)  # centre of the "Продажа" template
 DEFAULT_BAG_ANCHOR = Point(x=985, y=265)  # centre of the "Рюкзак" template
+SUPPORTED_CLIENT_SIZES = {(1440, 1080), (1280, 720)}
 
 
 @lru_cache(maxsize=8)
@@ -100,6 +101,27 @@ def locate_bag(frame: Image.Image) -> Point | None:
 
 def _shift(point: Point, dx: int, dy: int) -> Point:
     return Point(x=point.x + dx, y=point.y + dy)
+
+
+def geometry_for_client(base: Geometry, width: int, height: int) -> Geometry:
+    """Adapt centred dialogs while keeping draggable panels anchor-relative."""
+    if (width, height) not in SUPPORTED_CLIENT_SIZES:
+        supported = ", ".join(f"{w}x{h}" for w, h in sorted(SUPPORTED_CLIENT_SIZES))
+        raise RuntimeError(f"непідтримуваний розмір гри {width}x{height}; доступні {supported}")
+    reference = Geometry()
+    dx = (width - reference.client_width) // 2
+    dy = (height - reference.client_height) // 2
+    return base.model_copy(
+        deep=True,
+        update={
+            "client_width": width,
+            "client_height": height,
+            "dialog_price": _shift(reference.dialog_price, dx, dy),
+            "dialog_quantity": _shift(reference.dialog_quantity, dx, dy),
+            "dialog_accept": _shift(reference.dialog_accept, dx, dy),
+            "split_accept": _shift(reference.split_accept, dx, dy),
+        },
+    )
 
 
 def geometry_for_frame(

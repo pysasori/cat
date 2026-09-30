@@ -14,7 +14,7 @@ from app.capture import WindowCapture
 from app.game_state import detect_free_funds
 from app.input import InputDriver, make_input
 from app.inventory import InventoryStack, scan_templates
-from app.layout import geometry_for_frame, locate_bag, locate_shop
+from app.layout import geometry_for_client, geometry_for_frame, locate_bag, locate_shop
 from app.market import fetch_quote
 from app.models import AppConfig, CatalogItem, InputMode, JobState, Lot, LotSide, Point, PriceMode, ProfileEntry
 from app.storage import Repository
@@ -454,6 +454,10 @@ class ShopRunner:
         if not lots:
             raise RuntimeError("у базі немає увімкнених лотів")
         window = resolve_window(config.window_hwnd, config.window_index)
+        config = config.model_copy(
+            deep=True,
+            update={"geometry": geometry_for_client(config.geometry, window.width, window.height)},
+        )
         self._validate_window(window, config)
         capture = WindowCapture(window.hwnd)
         frame = capture.grab()
@@ -844,6 +848,10 @@ class ShopRunner:
         if character and character.window_hwnd != window.hwnd:
             character = character.model_copy(update={"window_hwnd": window.hwnd})
             self.repository.replace_character(character)
+        config = config.model_copy(
+            deep=True,
+            update={"geometry": geometry_for_client(config.geometry, window.width, window.height)},
+        )
         self._validate_window(window, config)
         capture = WindowCapture(window.hwnd)
         raw_driver = make_input(config.input_mode, window.hwnd, config.drag_duration)
