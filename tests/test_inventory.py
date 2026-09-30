@@ -68,6 +68,34 @@ def test_top_stack_uses_separate_tooltip_driver(monkeypatch):
     assert len(foreground.moves) == 2
 
 
+def test_two_sided_top_stack_skips_unreliable_tooltip(monkeypatch):
+    grid = AppConfig().geometry.bag_grid
+    frame = Image.new("RGB", (1440, 1080), "black")
+    background = Driver()
+    foreground = Driver()
+    monkeypatch.setattr(inventory, "occupied_grid_indexes", lambda *_: [0])
+    monkeypatch.setattr(inventory, "icon_similarity", lambda *_: 0.99)
+    monkeypatch.setattr(
+        inventory,
+        "tooltip_count",
+        lambda *_: (_ for _ in ()).throw(AssertionError("tooltip must not be read")),
+    )
+
+    result = scan_templates(
+        Capture(frame),
+        background,
+        {"loot": Image.new("RGB", (26, 26), "white")},
+        grid,
+        0.8,
+        wait=lambda _: None,
+        tooltip_driver=foreground,
+        skip_quantity_for={"loot"},
+    )
+
+    assert result["loot"][0].quantity == 1
+    assert foreground.moves == []
+
+
 def test_inventory_identifies_loot_from_upper_icon_half(monkeypatch):
     grid = AppConfig().geometry.bag_grid
     frame = Image.new("RGB", (1440, 1080), "black")

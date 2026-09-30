@@ -66,6 +66,7 @@ class Geometry(BaseModel):
     offline_button: Point = Field(default_factory=lambda: Point(x=283, y=633))
     dialog_price: Point = Field(default_factory=lambda: Point(x=795, y=811))
     dialog_quantity: Point = Field(default_factory=lambda: Point(x=720, y=837))
+    dialog_maximum: Point = Field(default_factory=lambda: Point(x=795, y=837))
     dialog_accept: Point = Field(default_factory=lambda: Point(x=691, y=866))
     split_accept: Point = Field(default_factory=lambda: Point(x=743, y=875))
 

@@ -45,7 +45,8 @@ def test_geometry_supports_1280_by_720_client():
     assert (resized.client_width, resized.client_height) == (1280, 720)
     assert resized.sale_grid == base.sale_grid
     assert resized.bag_grid == base.bag_grid
-    assert resized.dialog_price == Point(x=715, y=631)
-    assert resized.dialog_quantity == Point(x=640, y=657)
-    assert resized.dialog_accept == Point(x=611, y=686)
-    assert resized.split_accept == Point(x=663, y=695)
+    assert resized.dialog_price == Point(x=679, y=555)
+    assert resized.dialog_quantity == Point(x=637, y=581)
+    assert resized.dialog_maximum == Point(x=709, y=581)
+    assert resized.dialog_accept == Point(x=622, y=609)
+    assert resized.split_accept == Point(x=674, y=618)

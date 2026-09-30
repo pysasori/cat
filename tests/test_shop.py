@@ -4,7 +4,7 @@ import pytest
 from app.inventory import InventoryStack
 from app.models import AppConfig, CatalogItem, Character, Lot, LotSide, Point, Profile, ProfileEntry
 from app import shop
-from app.shop import BuyReservation, ShopRunner, layout_quantities, sale_stack_plan
+from app.shop import ShopRunner, layout_quantities, sale_stack_plan
 from app.storage import Repository
 from app.vision import Match, crop_icon
 from app.windows import GameWindow
@@ -53,11 +53,11 @@ def inventory_stack(config: AppConfig, index: int, quantity: int) -> InventorySt
     )
 
 
-def test_sale_stack_plan_keeps_top_anchor_and_reserves_bottom_sample():
+def test_sale_stack_plan_keeps_top_anchor_and_ignores_bottom_sample():
     config = AppConfig()
     stacks = [inventory_stack(config, 0, 100), inventory_stack(config, 17, 36)]
 
-    planned = sale_stack_plan(stacks, BuyReservation(source_index=17, split=False))
+    planned = sale_stack_plan(stacks)
 
     assert [quantity for _, quantity in planned] == [99]
     assert sum(quantity for _, quantity in planned) == 99
@@ -81,6 +81,15 @@ def test_layout_quantities_caps_sale_at_one_stack():
     )
 
     assert (sale, buy, needs_sample) == (100, 0, False)
+
+
+def test_two_sided_layout_sells_maximum_minus_one_from_largest_stack():
+    config = AppConfig()
+    stacks = [inventory_stack(config, 0, 100), inventory_stack(config, 1, 31)]
+
+    sale, buy, needs_sample = layout_quantities(stacks, 200, True, True, stack_limit=100)
+
+    assert (sale, buy, needs_sample) == (99, 69, True)
 
 
 def test_multiple_inventory_stacks_are_merged_before_single_sale_lot(tmp_path):
@@ -130,6 +139,55 @@ def test_multiple_inventory_stacks_are_merged_before_single_sale_lot(tmp_path):
     assert drags[0][4] == "alt"
     assert (drags[1][2], drags[1][3]) == (sale.x, sale.y)
     assert dialogs == [135]
+
+
+def test_two_sided_item_is_sold_before_remaining_sample_is_used_for_buy(tmp_path, monkeypatch):
+    repository = Repository(tmp_path)
+    runner = ShopRunner(repository)
+    config = AppConfig(click_ok=False, shop_name="", action_delay=0.05)
+    icon = "loot.png"
+    make_item((80, 160, 70)).save(repository.icons / icon)
+    sale = Lot(name="Loot", side=LotSide.SALE, quantity=4, price=20_000, icon_file=icon)
+    buy = Lot(name="Loot", side=LotSide.BUY, quantity=6, price=10_000, icon_file=icon)
+    stack = inventory_stack(config, 0, 5)
+    events = []
+
+    class Driver:
+        def drag(self, x1, y1, x2, y2, *, modifier=None):
+            events.append(("drag", x1, y1, x2, y2, modifier))
+
+        def click(self, *_):
+            pass
+
+        def clear_text(self, *_):
+            pass
+
+        def type_text(self, *_):
+            pass
+
+    runner._sleep = lambda _: None
+    runner._wait_for_panels = lambda *_: Image.new("RGB", (1440, 1080), (5, 8, 10))
+    runner._require_item_at = lambda *_: None
+    runner._require_slot_state = lambda *_: None
+    runner._fill_dialog = lambda _capture, _driver, lot, *_args, **_kwargs: events.append(
+        ("dialog", lot.side)
+    )
+    monkeypatch.setattr(shop, "search_grid", lambda *_: [stack.match])
+
+    runner._fill_lots(
+        capture=object(),
+        input_driver=Driver(),
+        lots=[sale, buy],
+        config=config,
+        inventory_stacks={icon: [stack]},
+    )
+
+    sale_target = config.geometry.sale_grid.point(0)
+    buy_target = config.geometry.buy_grid.point(0)
+    assert events[0][3:5] == (sale_target.x, sale_target.y)
+    assert events[1] == ("dialog", LotSide.SALE)
+    assert events[2][3:5] == (buy_target.x, buy_target.y)
+    assert events[3] == ("dialog", LotSide.BUY)
 
 
 def test_offline_trade_confirms_shop_before_starting_offline_mode(tmp_path):

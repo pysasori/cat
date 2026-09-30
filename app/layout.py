@@ -109,17 +109,33 @@ def geometry_for_client(base: Geometry, width: int, height: int) -> Geometry:
         supported = ", ".join(f"{w}x{h}" for w, h in sorted(SUPPORTED_CLIENT_SIZES))
         raise RuntimeError(f"непідтримуваний розмір гри {width}x{height}; доступні {supported}")
     reference = Geometry()
-    dx = (width - reference.client_width) // 2
-    dy = (height - reference.client_height) // 2
+    if (width, height) == (1280, 720):
+        # Live ComebackPW 1280x720 dialogs sit higher than a simple centred
+        # translation of the 1440x1080 layout. These points were measured from
+        # the sale-quantity dialog on Ellnalise.
+        dialog_points = {
+            "dialog_price": Point(x=679, y=555),
+            "dialog_quantity": Point(x=637, y=581),
+            "dialog_maximum": Point(x=709, y=581),
+            "dialog_accept": Point(x=622, y=609),
+            "split_accept": Point(x=674, y=618),
+        }
+    else:
+        dx = (width - reference.client_width) // 2
+        dy = (height - reference.client_height) // 2
+        dialog_points = {
+            "dialog_price": _shift(reference.dialog_price, dx, dy),
+            "dialog_quantity": _shift(reference.dialog_quantity, dx, dy),
+            "dialog_maximum": _shift(reference.dialog_maximum, dx, dy),
+            "dialog_accept": _shift(reference.dialog_accept, dx, dy),
+            "split_accept": _shift(reference.split_accept, dx, dy),
+        }
     return base.model_copy(
         deep=True,
         update={
             "client_width": width,
             "client_height": height,
-            "dialog_price": _shift(reference.dialog_price, dx, dy),
-            "dialog_quantity": _shift(reference.dialog_quantity, dx, dy),
-            "dialog_accept": _shift(reference.dialog_accept, dx, dy),
-            "split_accept": _shift(reference.split_accept, dx, dy),
+            **dialog_points,
         },
     )
 

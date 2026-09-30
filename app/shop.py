@@ -13,12 +13,12 @@ from PIL import Image
 from app.capture import WindowCapture
 from app.game_state import detect_free_funds
 from app.input import InputDriver, make_input
-from app.inventory import InventoryStack, scan_templates
+from app.inventory import InventoryStack, dialog_quantity_count, scan_templates
 from app.layout import geometry_for_client, geometry_for_frame, locate_bag, locate_shop
 from app.market import fetch_quote
 from app.models import AppConfig, CatalogItem, InputMode, JobState, Lot, LotSide, Point, PriceMode, ProfileEntry
 from app.storage import Repository
-from app.vision import Match, crop_icon, find_empty_cell, icon_similarity, image_changed, load_icon, occupied_grid_indexes, occupied_shop_grid_indexes, search_grid
+from app.vision import Match, crop_icon, icon_similarity, image_changed, load_icon, occupied_grid_indexes, occupied_shop_grid_indexes, search_grid
 from app.windows import GameWindow, resolve_window
 
 
@@ -41,12 +41,6 @@ class PlannedLot:
             "quantity": self.lot.quantity,
             "modifier": "alt-split-1" if self.lot.side is LotSide.BUY else None,
         }
-
-
-@dataclass(frozen=True)
-class BuyReservation:
-    source_index: int
-    split: bool
 
 
 class GuardedInput:
@@ -88,7 +82,6 @@ class GuardedInput:
 
 def sale_stack_plan(
     stacks: list[InventoryStack],
-    reservation: BuyReservation | None = None,
     sale_slot_count: int = 16,
 ) -> list[tuple[InventoryStack, int]]:
     """Sell only top-half stacks, keeping one top anchor and all bottom samples."""
@@ -97,12 +90,6 @@ def sale_stack_plan(
         if stack.match.index >= sale_slot_count:
             continue
         quantity = stack.quantity
-        if (
-            reservation is not None
-            and reservation.split
-            and stack.match.index == reservation.source_index
-        ):
-            quantity -= 1
         if quantity > 0:
             result.append((stack, quantity))
     if result:
@@ -127,8 +114,16 @@ def layout_quantities(
     has_bottom_sample = any(stack.match.index >= sale_slot_count for stack in stacks)
     buy_quantity = max(0, maximum - owned) if buy_enabled else 0
     needs_sample = bool(buy_quantity and owned and not has_bottom_sample)
-    reserved_top = (1 if top_owned else 0) + (1 if needs_sample else 0)
-    available_for_sale = max(0, top_owned - reserved_top)
+    if sale_enabled and buy_enabled:
+        # The live sale dialog gives the exact size of one stack. Sell that
+        # stack's Maximum - 1 so the remaining item can immediately seed buy.
+        largest_top = max(
+            (stack.quantity for stack in stacks if stack.match.index < sale_slot_count),
+            default=0,
+        )
+        available_for_sale = max(0, largest_top - 1)
+    else:
+        available_for_sale = max(0, top_owned - (1 if top_owned else 0))
     # One catalog item occupies one sale slot. If the total exceeds the game's
     # stack limit, sell one full stack and leave the overflow in the bag.
     sale_quantity = min(available_for_sale, stack_limit) if sale_enabled else 0
@@ -484,9 +479,6 @@ class ShopRunner:
         config: AppConfig,
         inventory_stacks: dict[str, list[InventoryStack]] | None = None,
     ) -> None:
-        buy_samples, sample_indexes, buy_originals, reservations = self._prepare_buy_samples(
-            capture, input_driver, lots, config, inventory_stacks
-        )
         self._set(stage="filling")
         sale_index = buy_index = 0
         for position, lot in enumerate(lots, start=1):
@@ -499,8 +491,21 @@ class ShopRunner:
             template = load_icon(self.repository.icons / lot.icon_file)
             self._log(f"{position}/{len(lots)} · {lot.name}: перетягую")
             if lot.side is LotSide.BUY:
-                sample = buy_samples[lot.id]
                 before_dialog = self._wait_for_panels(capture, config)
+                matches = search_grid(before_dialog, template, config.geometry.bag_grid)
+                sale_slot_count = config.geometry.bag_grid.count // 2
+                bottom = [match for match in matches if match.index >= sale_slot_count]
+                sample_match = (
+                    bottom[0]
+                    if bottom and bottom[0].score >= config.match_threshold
+                    else matches[0]
+                )
+                if sample_match.score < config.match_threshold:
+                    raise RuntimeError(
+                        f"{lot.name}: після продажу не залишився зразок для скупки "
+                        f"(збіг {sample_match.score:.2f})"
+                    )
+                sample = sample_match.point
                 self._require_item_at(
                     before_dialog,
                     template,
@@ -521,7 +526,6 @@ class ShopRunner:
                 if known_stacks is not None:
                     sources = sale_stack_plan(
                         known_stacks,
-                        reservations.get(lot.icon_file),
                         config.geometry.bag_grid.count // 2,
                     )
                     available = sum(quantity for _, quantity in sources)
@@ -535,14 +539,7 @@ class ShopRunner:
                         stack for stack in known_stacks if stack.match.index < sale_slot_count
                     ]
                     primary = max(top_stacks, key=lambda stack: stack.quantity)
-                    reservation = reservations.get(lot.icon_file)
                     primary_quantity = primary.quantity
-                    if (
-                        reservation is not None
-                        and reservation.split
-                        and reservation.source_index == primary.match.index
-                    ):
-                        primary_quantity -= 1
                     needed = max(0, lot.quantity - primary_quantity)
                     for extra in (stack for stack in top_stacks if stack is not primary):
                         if needed <= 0:
@@ -660,19 +657,8 @@ class ShopRunner:
                     continue
                 else:
                     fresh = self._wait_for_panels(capture, config)
-                    paired = max(
-                        buy_originals,
-                        key=lambda item: icon_similarity(template, item[0]),
-                        default=None,
-                    )
-                    if paired is not None and icon_similarity(template, paired[0]) >= 0.9:
-                        best = paired[1]
-                    else:
-                        matches = search_grid(fresh, template, config.geometry.bag_grid)
-                        best = next(
-                            (match for match in matches if match.index not in sample_indexes),
-                            matches[0],
-                        )
+                    matches = search_grid(fresh, template, config.geometry.bag_grid)
+                    best = matches[0]
                 if best.score < config.match_threshold:
                     raise RuntimeError(
                         f"{lot.name}: предмет не знайдено (збіг {best.score:.2f}, потрібно {config.match_threshold:.2f})"
@@ -771,6 +757,101 @@ class ShopRunner:
                 self._sleep(0.50)
         else:
             self._log("офлайн-лавку не натискаю (тестовий режим)")
+
+    def _measure_sale_quantities(
+        self,
+        capture: WindowCapture,
+        driver: InputDriver,
+        config: AppConfig,
+        stacks: dict[str, list[InventoryStack]],
+        templates: dict[str, Image.Image],
+        item_names: dict[str, str],
+        item_ids: list[str],
+    ) -> dict[str, list[InventoryStack]]:
+        """Read exact two-sided stack sizes through sale Maximum, then cancel."""
+        sale_slot_count = config.geometry.bag_grid.count // 2
+        initial = self._wait_for_panels(capture, config)
+        occupied_sale = set(occupied_shop_grid_indexes(initial, config.geometry.sale_grid))
+        target_index = next(
+            (
+                index
+                # The lower half is rendered as red locked cells on this client.
+                for index in range(config.geometry.sale_grid.count // 2)
+                if index not in occupied_sale
+            ),
+            None,
+        )
+        if target_index is None:
+            raise RuntimeError("немає вільного лота продажу для читання «Максимум»")
+        target = config.geometry.sale_grid.point(target_index)
+        measured = {item_id: list(values) for item_id, values in stacks.items()}
+        for item_id in item_ids:
+            template = templates[item_id]
+            name = item_names[item_id]
+            updated: list[InventoryStack] = []
+            for stack in measured.get(item_id, []):
+                if stack.match.index >= sale_slot_count:
+                    updated.append(stack)
+                    continue
+                before = self._wait_for_panels(capture, config)
+                self._require_item_at(
+                    before,
+                    template,
+                    stack.match.point,
+                    config.match_threshold,
+                    name,
+                )
+                self._require_slot_state(
+                    before,
+                    config.geometry.sale_grid,
+                    target_index,
+                    False,
+                    "тимчасовий лот для читання кількості",
+                )
+                driver.drag(
+                    stack.match.point.x,
+                    stack.match.point.y,
+                    target.x,
+                    target.y,
+                )
+                self._sleep(config.dialogs.open_delay)
+                opened = False
+                try:
+                    self._require_dialog(capture, config, config.geometry.dialog_accept, before)
+                    opened = True
+                    maximum = config.geometry.dialog_maximum
+                    driver.click(maximum.x, maximum.y)
+                    self._sleep(config.dialogs.field_delay)
+                    dialog = self._require_dialog(
+                        capture,
+                        config,
+                        config.geometry.dialog_accept,
+                        before,
+                    )
+                    quantity = dialog_quantity_count(dialog, config.geometry.dialog_quantity)
+                finally:
+                    if opened:
+                        driver.press("esc")
+                        self._sleep(max(0.35, config.dialogs.field_delay))
+                after = self._wait_for_panels(capture, config)
+                self._require_item_at(
+                    after,
+                    template,
+                    stack.match.point,
+                    config.match_threshold,
+                    f"повернений стек {name}",
+                )
+                self._require_slot_state(
+                    after,
+                    config.geometry.sale_grid,
+                    target_index,
+                    False,
+                    "тимчасовий лот після скасування",
+                )
+                updated.append(InventoryStack(match=stack.match, quantity=quantity))
+                self._log(f"{name}: «Максимум» у продажі = {quantity}")
+            measured[item_id] = updated
+        return measured
 
     def _run_profile(
         self,
@@ -888,6 +969,11 @@ class ShopRunner:
             entry.item_id: load_icon(self.repository.icons / catalog[entry.item_id].icon_file)
             for entry in entries
         }
+        exact_quantity_ids = [
+            entry.item_id
+            for entry in entries
+            if entry.sale_enabled and entry.buy_enabled
+        ]
         tooltip_driver = None
         previous_foreground = None
         previous_cursor = None
@@ -915,6 +1001,7 @@ class ShopRunner:
                 config.match_threshold,
                 wait=self._sleep,
                 tooltip_driver=tooltip_driver,
+                skip_quantity_for=set(exact_quantity_ids) if not dry_run else None,
             )
         finally:
             if previous_foreground is not None and previous_cursor is not None:
@@ -930,6 +1017,17 @@ class ShopRunner:
                             win32gui.SetForegroundWindow(previous_foreground)
                         except win32gui.error:
                             win32gui.BringWindowToTop(previous_foreground)
+        if not dry_run and exact_quantity_ids:
+            self._log("Читаю точні кількості двосторонніх товарів через продаж → «Максимум»")
+            stacks = self._measure_sale_quantities(
+                capture,
+                driver,
+                config,
+                stacks,
+                templates,
+                {item_id: catalog[item_id].name for item_id in exact_quantity_ids},
+                exact_quantity_ids,
+            )
         funds_frame = capture.grab() if dry_run else self._wait_for_panels(capture, config)
         free_funds = detect_free_funds(
             funds_frame,
@@ -1156,96 +1254,6 @@ class ShopRunner:
         except ValueError as error:
             side = "продажу" if sale else "скупки"
             raise RuntimeError(f"{name}: помилка ціни {side}: {error}") from error
-
-    def _prepare_buy_samples(
-        self,
-        capture: WindowCapture,
-        driver: InputDriver,
-        lots: list[Lot],
-        config: AppConfig,
-        inventory_stacks: dict[str, list[InventoryStack]] | None = None,
-    ) -> tuple[
-        dict[str, Point],
-        set[int],
-        list[tuple[Image.Image, Match]],
-        dict[str, BuyReservation],
-    ]:
-        samples = {}
-        sample_indexes: set[int] = set()
-        originals: list[tuple[Image.Image, Match]] = []
-        reservations: dict[str, BuyReservation] = {}
-        for lot in (item for item in lots if item.side is LotSide.BUY):
-            self._check_stop()
-            fresh = self._wait_for_panels(capture, config)
-            template = load_icon(self.repository.icons / lot.icon_file)
-            known = (inventory_stacks or {}).get(lot.icon_file, [])
-            sale_slot_count = config.geometry.bag_grid.count // 2
-            bottom_samples = [stack for stack in known if stack.match.index >= sale_slot_count]
-            if bottom_samples:
-                sample = max(bottom_samples, key=lambda stack: stack.quantity)
-                best = sample.match
-                self._log(f"{lot.name}: використовую недоторканний зразок з нижніх 16 комірок")
-                samples[lot.id] = best.point
-                sample_indexes.add(best.index)
-                originals.append((template, best))
-                reservations[lot.icon_file] = BuyReservation(best.index, split=False)
-                continue
-            top_stacks = [stack for stack in known if stack.match.index < sale_slot_count]
-            recognized_stack = bool(top_stacks)
-            source = max(top_stacks, key=lambda stack: stack.quantity) if top_stacks else None
-            best = source.match if source else search_grid(fresh, template, config.geometry.bag_grid)[0]
-            if not recognized_stack and best.score < config.match_threshold:
-                raise RuntimeError(
-                    f"{lot.name}: предмет для скупки не знайдено "
-                    f"(збіг {best.score:.2f}, потрібно {config.match_threshold:.2f})"
-                )
-            bottom_indexes = set(range(sale_slot_count, config.geometry.bag_grid.count))
-            empty = find_empty_cell(
-                fresh,
-                config.geometry.bag_grid,
-                {best.index},
-                allowed=bottom_indexes,
-            )
-            if empty is None:
-                raise RuntimeError(f"{lot.name}: у нижніх 16 комірках немає місця для зразка")
-            self._require_item_at(
-                fresh,
-                template,
-                best.point,
-                config.match_threshold,
-                lot.name,
-            )
-            self._require_slot_state(
-                fresh,
-                config.geometry.bag_grid,
-                empty.index,
-                False,
-                f"місце зразка {lot.name}",
-            )
-            if source is not None and source.quantity == 1:
-                self._log(f"{lot.name}: переношу єдину 1 шт. у нижні 16 як зразок")
-                driver.drag(best.point.x, best.point.y, empty.point.x, empty.point.y)
-            else:
-                self._log(f"{lot.name}: відділяю 1 шт. через Alt у нижні 16 для скупки")
-                driver.drag(best.point.x, best.point.y, empty.point.x, empty.point.y, modifier="alt")
-                self._sleep(config.dialogs.open_delay)
-                accept = config.geometry.split_accept
-                self._require_dialog(capture, config, accept, fresh)
-                driver.click(accept.x, accept.y)
-            self._sleep(config.action_delay)
-            after = self._wait_for_panels(capture, config)
-            self._require_item_at(
-                after,
-                template,
-                empty.point,
-                config.match_threshold,
-                f"зразок {lot.name}",
-            )
-            samples[lot.id] = empty.point
-            sample_indexes.add(empty.index)
-            originals.append((template, best))
-            reservations[lot.icon_file] = BuyReservation(best.index, split=True)
-        return samples, sample_indexes, originals, reservations
 
     def _plan(self, frame: Image.Image, lots: list[Lot], config: AppConfig) -> list[PlannedLot]:
         result: list[PlannedLot] = []

@@ -8,11 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from app.capture import WindowCapture
 from app.input import InputDriver
-from app.models import Grid
+from app.models import Grid, Point
 from app.vision import Match, crop_icon, icon_similarity, occupied_grid_indexes
 
 
@@ -67,6 +67,49 @@ def tooltip_count(capture: WindowCapture, match: Match) -> int:
     return 1
 
 
+def dialog_quantity_count(frame: Image.Image, point: Point) -> int:
+    """OCR the value shown in PW's quantity edit after pressing Maximum."""
+    if not TESSERACT.exists():
+        raise RuntimeError("Tesseract OCR не знайдено в C:\\Program Files\\Tesseract-OCR")
+    # Keep only the dark edit interior. Including its beveled border makes
+    # Tesseract drop the last digit of PW's tiny bitmap font.
+    crop = frame.crop((point.x - 25, point.y - 10, point.x + 25, point.y + 9)).convert("L")
+    crop = crop.resize((crop.width * 10, crop.height * 10), Image.Resampling.LANCZOS)
+    crop = ImageOps.expand(crop, border=40, fill=0)
+    payload = io.BytesIO()
+    crop.save(payload, format="PNG")
+    values: list[int] = []
+    for psm in (6, 7, 10):
+        result = subprocess.run(
+            [
+                str(TESSERACT),
+                "stdin",
+                "stdout",
+                "--psm",
+                str(psm),
+                "-l",
+                "eng",
+                "-c",
+                "tessedit_char_whitelist=0123456789",
+            ],
+            input=payload.getvalue(),
+            capture_output=True,
+            timeout=8,
+            check=False,
+        )
+        digits = re.sub(r"\D", "", result.stdout.decode("utf-8", errors="ignore"))
+        if digits:
+            values.append(int(digits))
+    if not values:
+        raise RuntimeError("не вдалося прочитати кількість після натискання «Максимум»")
+    # Require two OCR layouts to agree; a single hallucinated digit must never
+    # decide how much stock is sold.
+    quantity = max(set(values), key=values.count)
+    if values.count(quantity) < 2 or quantity < 1 or quantity > 999_999:
+        raise RuntimeError(f"неоднозначна кількість після «Максимум»: {values}")
+    return quantity
+
+
 def scan_templates(
     capture: WindowCapture,
     driver: InputDriver,
@@ -75,6 +118,7 @@ def scan_templates(
     threshold: float,
     wait: Callable[[float], None] = time.sleep,
     tooltip_driver: InputDriver | None = None,
+    skip_quantity_for: set[str] | None = None,
 ) -> dict[str, list[InventoryStack]]:
     """Assign each occupied bag cell to its closest profile icon, then OCR its stack."""
     # A tooltip left over from a previous scan can cover lower bag cells in the
@@ -100,10 +144,16 @@ def scan_templates(
         if scores and scores[0][0] >= minimum and scores[0][0] - runner_up >= 0.02:
             candidates.append((scores[0][1], Match(index=index, point=point, score=scores[0][0])))
     hover_driver = tooltip_driver or driver
+    skip_quantity_for = skip_quantity_for or set()
     for item_id, match in candidates:
         if match.index >= grid.count // 2:
             # The lower 16 cells are a protected sample bank. Samples are
             # created as singletons and are never counted as sale stock.
+            result[item_id].append(InventoryStack(match=match, quantity=1))
+            continue
+        if item_id in skip_quantity_for:
+            # Two-sided items are measured from the sale dialog's exact
+            # Maximum value. Tooltips are too slow and occasionally stale.
             result[item_id].append(InventoryStack(match=match, quantity=1))
             continue
         # Leave the bag first. Moving directly between adjacent identical icons
