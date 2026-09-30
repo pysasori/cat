@@ -13,7 +13,12 @@ from PIL import Image
 from app.capture import WindowCapture
 from app.game_state import detect_free_funds
 from app.input import InputDriver, make_input
-from app.inventory import InventoryStack, dialog_quantity_count, scan_templates
+from app.inventory import (
+    InventoryStack,
+    dialog_quantity_count,
+    dialog_quantity_signature,
+    scan_templates,
+)
 from app.layout import geometry_for_client, geometry_for_frame, locate_bag, locate_shop
 from app.market import fetch_quote
 from app.models import AppConfig, CatalogItem, InputMode, JobState, Lot, LotSide, Point, PriceMode, ProfileEntry
@@ -642,6 +647,7 @@ class ShopRunner:
                         lot,
                         config,
                         quantity=lot.quantity,
+                        maximum_minus_one=(lot.quantity == primary.quantity - 1),
                         before=before_dialog,
                     )
                     after = self._wait_for_panels(capture, config)
@@ -766,6 +772,7 @@ class ShopRunner:
         stacks: dict[str, list[InventoryStack]],
         templates: dict[str, Image.Image],
         item_names: dict[str, str],
+        stack_limits: dict[str, int],
         item_ids: list[str],
     ) -> dict[str, list[InventoryStack]]:
         """Read exact two-sided stack sizes through sale Maximum, then cancel."""
@@ -828,7 +835,19 @@ class ShopRunner:
                         config.geometry.dialog_accept,
                         before,
                     )
-                    quantity = dialog_quantity_count(dialog, config.geometry.dialog_quantity)
+                    try:
+                        quantity = dialog_quantity_count(dialog, config.geometry.dialog_quantity)
+                    except RuntimeError as error:
+                        self._log(
+                            f"{name}: OCR не прочитав «Максимум» ({error}); "
+                            "рахую кількість клавішею ↓"
+                        )
+                        quantity = self._dialog_quantity_by_decrement(
+                            capture,
+                            driver,
+                            config,
+                            stack_limits[item_id],
+                        )
                 finally:
                     if opened:
                         driver.press("esc")
@@ -852,6 +871,33 @@ class ShopRunner:
                 self._log(f"{name}: «Максимум» у продажі = {quantity}")
             measured[item_id] = updated
         return measured
+
+    def _dialog_quantity_by_decrement(
+        self,
+        capture: WindowCapture,
+        driver: InputDriver,
+        config: AppConfig,
+        stack_limit: int,
+    ) -> int:
+        """Count Maximum without OCR by pressing Down until the edit stops changing."""
+        point = config.geometry.dialog_quantity
+        driver.click(point.x, point.y)
+        self._sleep(0.10)
+        previous = dialog_quantity_signature(capture.grab(), point)
+        if previous == (0, 0, b""):
+            raise RuntimeError("поле кількості порожнє після «Максимум»")
+        quantity = 1
+        for _attempt in range(stack_limit):
+            driver.press("down")
+            self._sleep(0.08)
+            current = dialog_quantity_signature(capture.grab(), point)
+            if current == previous:
+                return quantity
+            quantity += 1
+            previous = current
+        raise RuntimeError(
+            f"кількість у стеку перевищила налаштований ліміт {stack_limit}"
+        )
 
     def _run_profile(
         self,
@@ -1026,6 +1072,7 @@ class ShopRunner:
                 stacks,
                 templates,
                 {item_id: catalog[item_id].name for item_id in exact_quantity_ids},
+                {item_id: catalog[item_id].stack_limit for item_id in exact_quantity_ids},
                 exact_quantity_ids,
             )
         funds_frame = capture.grab() if dry_run else self._wait_for_panels(capture, config)
@@ -1412,6 +1459,7 @@ class ShopRunner:
         lot: Lot,
         config: AppConfig,
         quantity: int | None = None,
+        maximum_minus_one: bool = False,
         before: Image.Image | None = None,
     ) -> None:
         self._require_dialog(capture, config, config.geometry.dialog_accept, before)
@@ -1423,14 +1471,24 @@ class ShopRunner:
             config,
             before,
         )
-        self._replace_dialog_value(
-            capture,
-            driver,
-            config.geometry.dialog_quantity,
-            str(lot.quantity if quantity is None else quantity),
-            config,
-            before,
-        )
+        if maximum_minus_one:
+            self._require_dialog(capture, config, config.geometry.dialog_accept, before)
+            maximum = config.geometry.dialog_maximum
+            driver.click(maximum.x, maximum.y)
+            self._sleep(config.dialogs.field_delay)
+            quantity_point = config.geometry.dialog_quantity
+            driver.click(quantity_point.x, quantity_point.y)
+            driver.press("down")
+            self._sleep(config.dialogs.field_delay)
+        else:
+            self._replace_dialog_value(
+                capture,
+                driver,
+                config.geometry.dialog_quantity,
+                str(lot.quantity if quantity is None else quantity),
+                config,
+                before,
+            )
         point = config.geometry.dialog_accept
         before_accept = self._require_dialog(capture, config, point, before)
         box = (

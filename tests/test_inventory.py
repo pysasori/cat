@@ -1,4 +1,4 @@
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app import inventory
 from app.inventory import scan_templates
@@ -119,3 +119,22 @@ def test_inventory_identifies_loot_from_upper_icon_half(monkeypatch):
 
     assert result["loot"]
     assert upper_half_flags == [True]
+
+
+def test_quantity_signature_ignores_blinking_caret():
+    point = AppConfig().geometry.dialog_quantity
+    plain = Image.new("RGB", (1440, 1080), "black")
+    focused = plain.copy()
+    ImageDraw.Draw(plain).rectangle(
+        (point.x - 18, point.y - 5, point.x - 14, point.y + 4), fill="white"
+    )
+    ImageDraw.Draw(focused).rectangle(
+        (point.x - 18, point.y - 5, point.x - 14, point.y + 4), fill="white"
+    )
+    ImageDraw.Draw(focused).line(
+        (point.x + 4, point.y - 5, point.x + 4, point.y + 4), fill="white"
+    )
+
+    assert inventory.dialog_quantity_signature(plain, point) == inventory.dialog_quantity_signature(
+        focused, point
+    )

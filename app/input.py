@@ -20,6 +20,7 @@ VK = {
     "esc": win32con.VK_ESCAPE,
     "backspace": win32con.VK_BACK,
     "delete": win32con.VK_DELETE,
+    "down": win32con.VK_DOWN,
     **{f"f{i}": win32con.VK_F1 + i - 1 for i in range(1, 13)},
     **{char: ord(char.upper()) for char in "abcdefghijklmnopqrstuvwxyz0123456789"},
 }

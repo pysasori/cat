@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+import cv2
+import numpy as np
 from PIL import Image, ImageOps
 
 from app.capture import WindowCapture
@@ -122,6 +124,26 @@ def dialog_quantity_count(frame: Image.Image, point: Point) -> int:
     if values.count(quantity) < 2 or quantity < 1 or quantity > 999_999:
         raise RuntimeError(f"неоднозначна кількість після «Максимум»: {values}")
     return quantity
+
+
+def dialog_quantity_signature(frame: Image.Image, point: Point) -> tuple[int, int, bytes]:
+    """Return a caret-insensitive bitmap signature of the quantity field."""
+    crop = frame.crop((point.x - 25, point.y - 10, point.x + 25, point.y + 9)).convert("L")
+    mask = (np.asarray(crop, dtype=np.uint8) > 90).astype(np.uint8)
+    count, labels, stats, _centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    cleaned = np.zeros_like(mask)
+    for label in range(1, count):
+        _x, _y, width, height, area = stats[label]
+        # The focused PW edit draws a narrow blinking caret after the digits.
+        if width <= 2 and height >= 7:
+            continue
+        if area >= 2:
+            cleaned[labels == label] = 1
+    ys, xs = np.where(cleaned)
+    if not len(xs):
+        return (0, 0, b"")
+    glyphs = cleaned[ys.min() : ys.max() + 1, xs.min() : xs.max() + 1]
+    return glyphs.shape[1], glyphs.shape[0], glyphs.tobytes()
 
 
 def scan_templates(
