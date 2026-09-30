@@ -101,6 +101,30 @@ def occupied_grid_indexes(frame: Image.Image, grid: Grid) -> list[int]:
     return occupied
 
 
+def occupied_shop_grid_indexes(frame: Image.Image, grid: Grid) -> list[int]:
+    """Find shop lots while rejecting dark empty cells and red locked cells."""
+    occupied = []
+    for index in range(grid.count):
+        point = grid.point(index)
+        pixels = np.asarray(crop_icon(frame, point.x, point.y, grid.icon_size), dtype=np.float32)
+        luminance = pixels.mean(axis=2)
+        mean = float(pixels.mean())
+        deviation = float(pixels.std())
+        bright_ratio = float((luminance > 70).mean())
+        red_ratio = float(
+            (
+                (pixels[:, :, 0] > 70)
+                & (pixels[:, :, 0] > pixels[:, :, 1] * 1.35)
+                & (pixels[:, :, 0] > pixels[:, :, 2] * 1.20)
+            ).mean()
+        )
+        is_empty = mean < 35 and deviation < 20 and bright_ratio < 0.04
+        is_locked = mean < 75 and bright_ratio < 0.30 and red_ratio >= 0.08
+        if not is_empty and not is_locked and deviation >= 20:
+            occupied.append(index)
+    return occupied
+
+
 def find_empty_cell(
     frame: Image.Image,
     grid: Grid,

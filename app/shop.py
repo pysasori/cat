@@ -18,7 +18,7 @@ from app.layout import geometry_for_frame, locate_bag, locate_shop
 from app.market import fetch_quote
 from app.models import AppConfig, CatalogItem, InputMode, JobState, Lot, LotSide, Point, PriceMode, ProfileEntry
 from app.storage import Repository
-from app.vision import Match, crop_icon, find_empty_cell, icon_similarity, image_changed, load_icon, occupied_grid_indexes, search_grid
+from app.vision import Match, crop_icon, find_empty_cell, icon_similarity, image_changed, load_icon, occupied_grid_indexes, occupied_shop_grid_indexes, search_grid
 from app.windows import GameWindow, resolve_window
 
 
@@ -1351,12 +1351,14 @@ class ShopRunner:
         grids = (config.geometry.sale_grid, config.geometry.buy_grid)
         maximum_attempts = sum(grid.count for grid in grids) + 4
         returned = 0
+        ignored: set[tuple[int, int]] = set()
         for _ in range(maximum_attempts):
             frame = self._wait_for_panels(capture, config)
             occupied = [
-                (grid, index)
-                for grid in grids
-                for index in occupied_grid_indexes(frame, grid)
+                (grid_number, grid, index)
+                for grid_number, grid in enumerate(grids)
+                for index in occupied_shop_grid_indexes(frame, grid)
+                if (grid_number, index) not in ignored
             ]
             if not occupied:
                 if returned:
@@ -1364,9 +1366,8 @@ class ShopRunner:
                 else:
                     self._log("Старих лотів немає")
                 return
-            grid, index = occupied[0]
+            grid_number, grid, index = occupied[0]
             slot = grid.point(index)
-            self._require_slot_state(frame, grid, index, True, "лот для повернення")
             driver.click(slot.x, slot.y)
             self._sleep(0.2)
             selected = self._wait_for_panels(capture, config)
@@ -1377,15 +1378,14 @@ class ShopRunner:
                 min(selected.height, slot.y + 16),
             )
             if image_changed(frame, selected, slot_box) < 1.0:
-                raise RuntimeError(
-                    "Безпечна зупинка: клік по лоту не змінив його підсвітку; "
-                    "кнопку повернення не натискаю"
-                )
+                ignored.add((grid_number, index))
+                continue
             button = config.geometry.return_button
             driver.click(button.x, button.y)
             self._sleep(max(0.8, config.action_delay))
             after = self._wait_for_panels(capture, config)
-            self._require_slot_state(after, grid, index, False, "повернений лот")
+            if index in occupied_shop_grid_indexes(after, grid):
+                raise RuntimeError("Безпечна зупинка: лот не повернувся у рюкзак")
             returned += 1
         raise RuntimeError("не вдалося повернути всі старі лоти в рюкзак")
 

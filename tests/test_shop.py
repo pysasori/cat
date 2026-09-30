@@ -306,6 +306,33 @@ def test_open_shop_retries_f1_until_window_appears(tmp_path, monkeypatch):
     assert driver.presses == ["f1", "f1"]
 
 
+def test_return_existing_lots_skips_non_interactive_locked_candidate(tmp_path, monkeypatch):
+    runner = ShopRunner(Repository(tmp_path))
+    config = AppConfig()
+    frame = Image.new("RGB", (1440, 1080), (5, 8, 10))
+
+    class Driver:
+        def __init__(self):
+            self.clicks = []
+
+        def click(self, x, y):
+            self.clicks.append((x, y))
+
+    driver = Driver()
+    sale_first = config.geometry.sale_grid.first
+    monkeypatch.setattr(runner, "_wait_for_panels", lambda *_: frame)
+    monkeypatch.setattr(runner, "_sleep", lambda *_: None)
+    monkeypatch.setattr(
+        shop,
+        "occupied_shop_grid_indexes",
+        lambda _frame, grid: [0] if grid.first == sale_first else [],
+    )
+
+    runner._return_existing_lots(None, driver, config)
+
+    assert driver.clicks == [(sale_first.x, sale_first.y)]
+
+
 def test_guarded_input_never_calls_driver_after_stop(tmp_path):
     runner = ShopRunner(Repository(tmp_path))
     calls = []

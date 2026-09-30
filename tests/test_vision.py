@@ -7,6 +7,7 @@ from app.vision import (
     icon_similarity,
     normalize_icon,
     occupied_grid_indexes,
+    occupied_shop_grid_indexes,
     search_grid,
 )
 
@@ -103,3 +104,20 @@ def test_occupied_grid_indexes_ignores_empty_and_locked_slot_clusters():
         frame.paste(tile, (point.x - 13, point.y - 13))
 
     assert occupied_grid_indexes(frame, grid) == [0, 1, 2]
+
+
+def test_shop_grid_finds_repeated_lots_and_ignores_red_locks():
+    frame = Image.new("RGB", (220, 150), (5, 8, 10))
+    grid = Grid(first=Point(x=30, y=30), step=Point(x=35, y=35), columns=5, rows=4)
+    empty = Image.new("RGB", (26, 26), (18, 22, 26))
+    repeated_lot = icon((185, 145, 65))
+    locked = empty.copy()
+    locked_draw = ImageDraw.Draw(locked)
+    locked_draw.ellipse((5, 5, 20, 20), outline=(165, 18, 28), width=3)
+    locked_draw.line((7, 19, 19, 7), fill=(165, 18, 28), width=3)
+    for index in range(grid.count):
+        point = grid.point(index)
+        tile = repeated_lot if index < 5 else locked if index >= 12 else empty
+        frame.paste(tile, (point.x - 13, point.y - 13))
+
+    assert occupied_shop_grid_indexes(frame, grid) == [0, 1, 2, 3, 4]
