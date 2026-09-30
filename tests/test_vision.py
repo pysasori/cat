@@ -1,7 +1,14 @@
 from PIL import Image, ImageDraw
 
 from app.models import Grid, Point
-from app.vision import crop_icon, find_empty_cell, icon_similarity, occupied_grid_indexes, search_grid
+from app.vision import (
+    crop_icon,
+    find_empty_cell,
+    icon_similarity,
+    normalize_icon,
+    occupied_grid_indexes,
+    search_grid,
+)
 
 
 def icon(color: tuple[int, int, int], mark: str = "x") -> Image.Image:
@@ -26,6 +33,24 @@ def test_similarity_tolerates_small_render_shift():
     shifted = Image.new("RGB", (26, 26), (12, 16, 20))
     shifted.paste(base, (1, -1))
     assert icon_similarity(base, shifted) > 0.90
+
+
+def test_upper_half_similarity_ignores_large_stack_count_overlay():
+    base = icon((70, 120, 230))
+    covered = base.copy()
+    ImageDraw.Draw(covered).rectangle((0, 13, 25, 25), fill=(250, 250, 250))
+
+    assert icon_similarity(base, covered, upper_half=True) > 0.98
+    assert icon_similarity(base, covered) < 0.90
+
+
+def test_normalize_icon_removes_comebackpw_frame():
+    inner = icon((70, 120, 230))
+    framed = Image.new("RGB", (32, 32), (40, 65, 100))
+    framed.paste(inner, (3, 3))
+
+    assert normalize_icon(framed).size == (26, 26)
+    assert icon_similarity(inner, framed) > 0.99
 
 
 def test_searches_every_bag_cell_and_returns_best():

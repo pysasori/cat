@@ -89,7 +89,10 @@ def scan_templates(
         point = grid.point(index)
         cell = crop_icon(frame, point.x, point.y, grid.icon_size)
         scores = sorted(
-            ((icon_similarity(template, cell), item_id) for item_id, template in templates.items()),
+            (
+                (icon_similarity(template, cell, True), item_id)
+                for item_id, template in templates.items()
+            ),
             reverse=True,
         )
         runner_up = scores[1][0] if len(scores) > 1 else 0.0

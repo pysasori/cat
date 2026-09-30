@@ -21,12 +21,31 @@ def crop_icon(image: Image.Image, x: int, y: int, size: int = 26) -> Image.Image
     return image.crop((x - half, y - half, x - half + size, y - half + size)).convert("RGB")
 
 
-def icon_similarity(first: Image.Image, second: Image.Image) -> float:
+def normalize_icon(image: Image.Image) -> Image.Image:
+    """Remove the 3 px frame used by 32x32 ComebackPW icons."""
+    icon = image.convert("RGB")
+    if icon.size == (32, 32):
+        return icon.crop((3, 3, 29, 29))
+    if icon.size != (26, 26):
+        return icon.resize((26, 26))
+    return icon
+
+
+def icon_similarity(
+    first: Image.Image,
+    second: Image.Image,
+    upper_half: bool = False,
+) -> float:
     """Compare icons despite stack digits, highlighting and a tiny pixel shift."""
-    a = np.asarray(first.convert("RGB").resize((26, 26)), dtype=np.float32) / 255.0
-    b = np.asarray(second.convert("RGB").resize((26, 26)), dtype=np.float32) / 255.0
+    a = np.asarray(normalize_icon(first), dtype=np.float32) / 255.0
+    b = np.asarray(normalize_icon(second), dtype=np.float32) / 255.0
     base_mask = np.ones((26, 26), dtype=bool)
-    base_mask[17:26, 0:14] = False
+    if upper_half:
+        # Large stack counts can cover most of the lower icon. Inventory
+        # discovery therefore identifies loot only from the unobstructed top.
+        base_mask[13:26, :] = False
+    else:
+        base_mask[17:26, 0:14] = False
     best = -1.0
     for dy in range(-2, 3):
         for dx in range(-2, 3):

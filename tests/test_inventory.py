@@ -66,3 +66,28 @@ def test_top_stack_uses_separate_tooltip_driver(monkeypatch):
     assert result["loot"][0].quantity == 37
     assert len(background.moves) == 1
     assert len(foreground.moves) == 2
+
+
+def test_inventory_identifies_loot_from_upper_icon_half(monkeypatch):
+    grid = AppConfig().geometry.bag_grid
+    frame = Image.new("RGB", (1440, 1080), "black")
+    upper_half_flags = []
+
+    def similarity(_template, _cell, upper_half=False):
+        upper_half_flags.append(upper_half)
+        return 0.99
+
+    monkeypatch.setattr(inventory, "occupied_grid_indexes", lambda *_: [16])
+    monkeypatch.setattr(inventory, "icon_similarity", similarity)
+
+    result = scan_templates(
+        Capture(frame),
+        Driver(),
+        {"loot": Image.new("RGB", (26, 26), "white")},
+        grid,
+        0.8,
+        wait=lambda _: None,
+    )
+
+    assert result["loot"]
+    assert upper_half_flags == [True]
