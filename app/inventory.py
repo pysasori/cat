@@ -74,12 +74,26 @@ def dialog_quantity_count(frame: Image.Image, point: Point) -> int:
     # Keep only the dark edit interior. Including its beveled border makes
     # Tesseract drop the last digit of PW's tiny bitmap font.
     crop = frame.crop((point.x - 25, point.y - 10, point.x + 25, point.y + 9)).convert("L")
-    crop = crop.resize((crop.width * 10, crop.height * 10), Image.Resampling.LANCZOS)
-    crop = ImageOps.expand(crop, border=40, fill=0)
+    # Trim the empty right side of the edit. Tesseract otherwise ignores a
+    # lone PW bitmap glyph (for example Maximum=9) as insignificant noise.
+    glyph_box = crop.point(lambda value: 255 if value > 90 else 0).getbbox()
+    if glyph_box is None:
+        raise RuntimeError("поле кількості після «Максимум» порожнє")
+    left, top, right, bottom = glyph_box
+    crop = crop.crop(
+        (
+            max(0, left - 2),
+            max(0, top - 2),
+            min(crop.width, right + 2),
+            min(crop.height, bottom + 2),
+        )
+    )
+    crop = crop.resize((crop.width * 15, crop.height * 15), Image.Resampling.LANCZOS)
+    crop = ImageOps.expand(crop, border=50, fill=0)
     payload = io.BytesIO()
     crop.save(payload, format="PNG")
     values: list[int] = []
-    for psm in (6, 7, 10):
+    for psm in (6, 7, 8, 10, 13):
         result = subprocess.run(
             [
                 str(TESSERACT),
