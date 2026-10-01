@@ -190,116 +190,40 @@ def test_two_sided_item_is_sold_before_remaining_sample_is_used_for_buy(tmp_path
     assert events[3] == ("dialog", LotSide.BUY)
 
 
-def test_quantity_fallback_counts_down_until_field_stops(tmp_path, monkeypatch):
+def test_sale_dialog_types_the_verified_maximum_minus_one_quantity(tmp_path, monkeypatch):
     runner = ShopRunner(Repository(tmp_path))
     config = AppConfig()
-    signatures = iter(((1, 1, b"3"), (1, 1, b"2"), (1, 1, b"1"), (1, 1, b"1")))
-    events = []
-
-    class Capture:
-        def grab(self):
-            return object()
-
-    class Driver:
-        def click(self, x, y):
-            events.append(("click", x, y))
-
-        def press(self, key):
-            events.append(("press", key))
-
-    runner._sleep = lambda _: None
-    monkeypatch.setattr(shop, "dialog_quantity_signature", lambda *_: next(signatures))
-
-    assert runner._dialog_quantity_by_decrement(Capture(), Driver(), config, 100) == 3
-    assert [event for event in events if event == ("press", "down")] == [
-        ("press", "down"),
-        ("press", "down"),
-        ("press", "down"),
-    ]
-
-
-def test_maximum_minus_one_dialog_uses_down_arrow_instead_of_typing(tmp_path, monkeypatch):
-    runner = ShopRunner(Repository(tmp_path))
-    config = AppConfig()
-    lot = Lot(name="Loot", side=LotSide.SALE, quantity=64, price=20_000, icon_file="loot.png")
-    events = []
+    lot = Lot(name="Loot", side=LotSide.SALE, quantity=72, price=20_000, icon_file="loot.png")
+    replacements = []
 
     class Capture:
         def grab(self):
             return Image.new("RGB", (1440, 1080), "black")
 
     class Driver:
-        def click(self, x, y):
-            events.append(("click", x, y))
-
-        def press(self, key):
-            events.append(("press", key))
+        def click(self, *_):
+            pass
 
     runner._sleep = lambda _: None
     runner._require_dialog = lambda *_: Image.new("RGB", (1440, 1080), "black")
-    runner._replace_dialog_value = lambda _capture, _driver, point, value, *_: events.append(
-        ("replace", point, value)
+    runner._replace_dialog_value = lambda _capture, _driver, point, value, *_: replacements.append(
+        (point, value)
     )
     monkeypatch.setattr(shop, "image_changed", lambda *_: 99.0)
-    signatures = iter(((1, 1, b"maximum"), (1, 1, b"maximum-minus-one")))
-    monkeypatch.setattr(shop, "dialog_quantity_signature", lambda *_: next(signatures))
 
     runner._fill_dialog(
         Capture(),
         Driver(),
         lot,
         config,
-        maximum_minus_one=True,
+        quantity=72,
         before=Image.new("RGB", (1440, 1080), "black"),
     )
 
-    assert ("replace", config.geometry.dialog_price, "20000") in events
-    assert ("click", config.geometry.dialog_maximum.x, config.geometry.dialog_maximum.y) in events
-    assert ("click", config.geometry.dialog_quantity.x, config.geometry.dialog_quantity.y) in events
-    assert ("press", "down") in events
-    assert not any(event[0] == "replace" and event[1] == config.geometry.dialog_quantity for event in events)
-
-
-def test_down_arrow_retries_in_foreground_when_background_is_ignored(tmp_path, monkeypatch):
-    runner = ShopRunner(Repository(tmp_path))
-    config = AppConfig()
-    previous = (1, 1, b"same")
-    signatures = iter((previous, (1, 1, b"changed")))
-    background_events = []
-    foreground_events = []
-
-    class Capture:
-        hwnd = 123
-
-        def grab(self):
-            return object()
-
-    class Driver:
-        def __init__(self, events):
-            self.events = events
-
-        def click(self, x, y):
-            self.events.append(("click", x, y))
-
-        def press(self, key):
-            self.events.append(("press", key))
-
-    background = Driver(background_events)
-    foreground = Driver(foreground_events)
-    runner._sleep = lambda _: None
-    runner._guard_driver = lambda _capture, driver, _config: driver
-    monkeypatch.setattr(shop, "make_input", lambda *_: foreground)
-    monkeypatch.setattr(shop, "dialog_quantity_signature", lambda *_: next(signatures))
-
-    current, used_driver, changed = runner._decrement_dialog_quantity(
-        Capture(), background, config, previous, allow_foreground=True
-    )
-
-    assert changed is True
-    assert current == (1, 1, b"changed")
-    assert used_driver is foreground
-    assert background_events == [("press", "down")]
-    assert foreground_events[-1] == ("press", "down")
+    assert replacements == [
+        (config.geometry.dialog_price, "20000"),
+        (config.geometry.dialog_quantity, "72"),
+    ]
 
 
 def test_offline_trade_confirms_shop_before_starting_offline_mode(tmp_path):

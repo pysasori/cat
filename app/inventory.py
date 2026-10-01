@@ -146,6 +146,47 @@ def dialog_quantity_signature(frame: Image.Image, point: Point) -> tuple[int, in
     return glyphs.shape[1], glyphs.shape[0], glyphs.tobytes()
 
 
+PW_DIGITS = {
+    "0": (".####.", ".#..#.", "##..#.", "##..##", "##..##", "##..##", "##..#.", ".#..#.", ".####."),
+    "1": ("..#", ".##", "#.#", "..#", "..#", "..#", "..#", "..#", "..#"),
+    "2": (".####.", "##..#.", "....#.", "....#.", "...##.", "..##..", ".##...", ".#....", "######"),
+    "3": (".####.", "##..#.", "....#.", "...##.", "..###.", "....#.", "....##", "##..#.", ".####."),
+    "4": ("...##", "..###", "..###", ".####", ".#.##", "##.##", "#####", "...##", "...##"),
+    "5": (".####.", ".#....", ".#....", ".####.", ".#..#.", "....##", "....##", "##..#.", ".####."),
+    "6": (".####.", ".#..#.", "##....", "#####.", "##..#.", "##..##", "##..##", ".#..#.", ".####."),
+    "7": ("######", "....#.", "...#..", "...#..", "..##..", "..#...", "..#...", ".##...", ".##..."),
+    "8": (".####.", ".#..#.", ".#..#.", ".####.", ".####.", "##..#.", "##..##", "##..#.", ".####."),
+    "9": (".####.", "##..#.", "##..##", "##..##", ".#.###", ".#####", "....#.", "##..#.", ".###.."),
+}
+
+
+def dialog_quantity_pixels(frame: Image.Image, point: Point) -> int:
+    """Read PW's fixed bitmap digits without Tesseract or language data."""
+    width, height, payload = dialog_quantity_signature(frame, point)
+    if height != 9 or width < 1:
+        raise RuntimeError("не вдалося виділити піксельні цифри кількості")
+    mask = np.frombuffer(payload, dtype=np.uint8).reshape(height, width)
+    digits: list[str] = []
+    right = width
+    while right > 0:
+        left = max(0, right - 6)
+        glyph = mask[:, left:right]
+        used = np.where(glyph.any(axis=0))[0]
+        if not len(used):
+            right = left
+            continue
+        glyph = glyph[:, used.min() : used.max() + 1]
+        rows = tuple("".join("#" if value else "." for value in row) for row in glyph)
+        digit = next((value for value, template in PW_DIGITS.items() if template == rows), None)
+        if digit is None:
+            raise RuntimeError(f"невідома піксельна цифра {glyph.shape[1]}x{glyph.shape[0]}")
+        digits.append(digit)
+        right = left
+    if not digits:
+        raise RuntimeError("поле кількості порожнє")
+    return int("".join(reversed(digits)))
+
+
 def scan_templates(
     capture: WindowCapture,
     driver: InputDriver,

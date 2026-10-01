@@ -138,3 +138,27 @@ def test_quantity_signature_ignores_blinking_caret():
     assert inventory.dialog_quantity_signature(plain, point) == inventory.dialog_quantity_signature(
         focused, point
     )
+
+
+def test_pixel_quantity_reader_recognizes_live_pw_100_bitmap():
+    point = AppConfig().geometry.dialog_quantity
+    frame = Image.new("RGB", (1440, 1080), "black")
+    rows = (
+        "..#...####..####.",
+        ".##...#..#..#..#.",
+        "#.#..##..#.##..#.",
+        "..#..##..####..##",
+        "..#..##..####..##",
+        "..#..##..####..##",
+        "..#..##..#.##..#.",
+        "..#...#..#..#..#.",
+        "..#...####..####.",
+    )
+    draw = ImageDraw.Draw(frame)
+    start_x, start_y = point.x - 20, point.y - 5
+    for y, row in enumerate(rows):
+        for x, value in enumerate(row):
+            if value == "#":
+                draw.point((start_x + x, start_y + y), fill="white")
+
+    assert inventory.dialog_quantity_pixels(frame, point) == 100
