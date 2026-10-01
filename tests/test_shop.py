@@ -226,6 +226,141 @@ def test_sale_dialog_types_the_verified_maximum_minus_one_quantity(tmp_path, mon
     ]
 
 
+def test_two_sided_sale_reads_maximum_and_finishes_the_same_drag(tmp_path, monkeypatch):
+    repository = Repository(tmp_path)
+    runner = ShopRunner(repository)
+    config = AppConfig(click_ok=False, shop_name="", action_delay=0.05)
+    icon = "loot.png"
+    make_item((80, 160, 70)).save(repository.icons / icon)
+    stack = inventory_stack(config, 0, 1)
+    sale = Lot(name="Loot", side=LotSide.SALE, quantity=1, price=20_000, icon_file=icon)
+    events = []
+
+    class Driver:
+        def drag(self, x1, y1, x2, y2, *, modifier=None):
+            events.append(("drag", x1, y1, x2, y2))
+
+        def click(self, x, y):
+            events.append(("click", x, y))
+
+        def press(self, key):
+            events.append(("press", key))
+
+    frame = Image.new("RGB", (1440, 1080), "black")
+    runner._sleep = lambda _: None
+    runner._wait_for_panels = lambda *_: frame
+    runner._require_item_at = lambda *_: None
+    runner._require_slot_state = lambda *_: None
+    runner._require_dialog = lambda *_: frame
+    runner._fill_dialog = lambda _capture, _driver, lot, *_args, **kwargs: events.append(
+        ("dialog", lot.quantity, kwargs["quantity"])
+    )
+    monkeypatch.setattr(shop, "dialog_quantity_pixels", lambda *_: 73)
+
+    filled = runner._fill_lots(
+        object(),
+        Driver(),
+        [sale],
+        config,
+        {icon: [stack]},
+        {icon: 100},
+    )
+
+    assert [event[0] for event in events].count("drag") == 1
+    assert ("dialog", 72, 72) in events
+    assert filled == [sale]
+
+
+def test_two_sided_sale_cancels_and_skips_lot_when_maximum_cannot_be_read(tmp_path, monkeypatch):
+    repository = Repository(tmp_path)
+    runner = ShopRunner(repository)
+    config = AppConfig(click_ok=False, shop_name="", action_delay=0.05)
+    icon = "loot.png"
+    make_item((80, 160, 70)).save(repository.icons / icon)
+    stack = inventory_stack(config, 0, 1)
+    sale = Lot(name="Loot", side=LotSide.SALE, quantity=1, price=20_000, icon_file=icon)
+    presses = []
+
+    class Driver:
+        def drag(self, *_args, **_kwargs):
+            pass
+
+        def click(self, *_args):
+            pass
+
+        def press(self, key):
+            presses.append(key)
+
+    frame = Image.new("RGB", (1440, 1080), "black")
+    runner._sleep = lambda _: None
+    runner._wait_for_panels = lambda *_: frame
+    runner._require_item_at = lambda *_: None
+    runner._require_slot_state = lambda *_: None
+    runner._require_dialog = lambda *_: frame
+    runner._fill_dialog = lambda *_args, **_kwargs: pytest.fail("failed lot must not be confirmed")
+    monkeypatch.setattr(
+        shop,
+        "dialog_quantity_pixels",
+        lambda *_: (_ for _ in ()).throw(RuntimeError("bad digits")),
+    )
+
+    filled = runner._fill_lots(
+        object(),
+        Driver(),
+        [sale],
+        config,
+        {icon: [stack]},
+        {icon: 100},
+    )
+
+    assert presses == ["esc"]
+    assert filled == []
+    assert any("лот пропущено" in message for message in runner.snapshot().log)
+
+
+def test_two_sided_sale_cancels_and_skips_lot_when_pw_rejects_dialog(tmp_path, monkeypatch):
+    repository = Repository(tmp_path)
+    runner = ShopRunner(repository)
+    config = AppConfig(click_ok=False, shop_name="", action_delay=0.05)
+    icon = "loot.png"
+    make_item((80, 160, 70)).save(repository.icons / icon)
+    sale = Lot(name="Loot", side=LotSide.SALE, quantity=1, price=20_000, icon_file=icon)
+    presses = []
+
+    class Driver:
+        def drag(self, *_args, **_kwargs):
+            pass
+
+        def click(self, *_args):
+            pass
+
+        def press(self, key):
+            presses.append(key)
+
+    frame = Image.new("RGB", (1440, 1080), "black")
+    runner._sleep = lambda _: None
+    runner._wait_for_panels = lambda *_: frame
+    runner._require_item_at = lambda *_: None
+    runner._require_slot_state = lambda *_: None
+    runner._require_dialog = lambda *_: frame
+    runner._fill_dialog = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        RuntimeError("dialog rejected")
+    )
+    monkeypatch.setattr(shop, "dialog_quantity_pixels", lambda *_: 73)
+
+    filled = runner._fill_lots(
+        object(),
+        Driver(),
+        [sale],
+        config,
+        {icon: [inventory_stack(config, 0, 1)]},
+        {icon: 100},
+    )
+
+    assert presses == ["esc"]
+    assert filled == []
+
+
 def test_offline_trade_confirms_shop_before_starting_offline_mode(tmp_path):
     runner = ShopRunner(Repository(tmp_path))
     config = AppConfig(click_ok=True, offline_trade=True, shop_name="")
@@ -400,7 +535,7 @@ def test_open_shop_retries_f1_until_window_appears(tmp_path, monkeypatch):
     assert driver.presses == ["f1", "f1"]
 
 
-def test_return_existing_lots_skips_non_interactive_locked_candidate(tmp_path, monkeypatch):
+def test_return_existing_lots_attempts_return_even_when_selected_lot_does_not_change(tmp_path, monkeypatch):
     runner = ShopRunner(Repository(tmp_path))
     config = AppConfig()
     frame = Image.new("RGB", (1440, 1080), (5, 8, 10))
@@ -416,15 +551,25 @@ def test_return_existing_lots_skips_non_interactive_locked_candidate(tmp_path, m
     sale_first = config.geometry.sale_grid.first
     monkeypatch.setattr(runner, "_wait_for_panels", lambda *_: frame)
     monkeypatch.setattr(runner, "_sleep", lambda *_: None)
+    monkeypatch.setattr(runner, "_open_windows", lambda _capture, _driver, current: current)
     monkeypatch.setattr(
         shop,
         "occupied_shop_grid_indexes",
         lambda _frame, grid: [0] if grid.first == sale_first else [],
     )
 
-    runner._return_existing_lots(None, driver, config)
+    with pytest.raises(RuntimeError, match="старий лот не повернувся"):
+        runner._return_existing_lots(None, driver, config)
 
-    assert driver.clicks == [(sale_first.x, sale_first.y)]
+    returned = config.geometry.return_button
+    cancel = config.geometry.cancel_button
+    assert driver.clicks == [
+        (returned.x, returned.y),
+        (cancel.x, cancel.y),
+        (returned.x, returned.y),
+        (sale_first.x, sale_first.y),
+        (returned.x, returned.y),
+    ]
 
 
 def test_guarded_input_never_calls_driver_after_stop(tmp_path):

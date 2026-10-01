@@ -63,6 +63,7 @@ class Geometry(BaseModel):
     shop_name: Point = Field(default_factory=lambda: Point(x=319, y=455))
     return_button: Point = Field(default_factory=lambda: Point(x=151, y=503))
     ok_button: Point = Field(default_factory=lambda: Point(x=386, y=503))
+    cancel_button: Point = Field(default_factory=lambda: Point(x=432, y=503))
     offline_button: Point = Field(default_factory=lambda: Point(x=283, y=633))
     dialog_price: Point = Field(default_factory=lambda: Point(x=795, y=811))
     dialog_quantity: Point = Field(default_factory=lambda: Point(x=720, y=837))

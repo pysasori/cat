@@ -121,6 +121,24 @@ def test_inventory_identifies_loot_from_upper_icon_half(monkeypatch):
     assert upper_half_flags == [True]
 
 
+def test_inventory_does_not_force_unrelated_item_into_closest_template(monkeypatch):
+    grid = AppConfig().geometry.bag_grid
+    frame = Image.new("RGB", (1440, 1080), "black")
+    monkeypatch.setattr(inventory, "occupied_grid_indexes", lambda *_: [0])
+    monkeypatch.setattr(inventory, "icon_similarity", lambda *_: 0.86)
+
+    result = scan_templates(
+        Capture(frame),
+        Driver(),
+        {"loot": Image.new("RGB", (26, 26), "white")},
+        grid,
+        0.60,
+        wait=lambda _: None,
+    )
+
+    assert result["loot"] == []
+
+
 def test_quantity_signature_ignores_blinking_caret():
     point = AppConfig().geometry.dialog_quantity
     plain = Image.new("RGB", (1440, 1080), "black")

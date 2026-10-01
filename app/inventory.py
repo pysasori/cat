@@ -217,7 +217,10 @@ def scan_templates(
             reverse=True,
         )
         runner_up = scores[1][0] if len(scores) > 1 else 0.0
-        minimum = max(0.60, threshold - 0.10)
+        # Unknown inventory items must not be forced into the closest profile
+        # template. Real copies score close to 1.0 after frame/count masking;
+        # the old 0.60 floor classified unrelated loot as configured goods.
+        minimum = max(0.88, threshold)
         if scores and scores[0][0] >= minimum and scores[0][0] - runner_up >= 0.02:
             candidates.append((scores[0][1], Match(index=index, point=point, score=scores[0][0])))
     hover_driver = tooltip_driver or driver

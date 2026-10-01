@@ -72,6 +72,7 @@ def _shop_anchor_fits(anchor: Point, width: int, height: int) -> bool:
         geometry.shop_name,
         geometry.return_button,
         geometry.ok_button,
+        geometry.cancel_button,
         geometry.offline_button,
     ]
     return all(_point_inside(point, width, height) for point in points)
@@ -167,6 +168,7 @@ def geometry_for_frame(
             "shop_name": _shift(reference.shop_name, shop_dx, shop_dy),
             "return_button": _shift(reference.return_button, shop_dx, shop_dy),
             "ok_button": _shift(reference.ok_button, shop_dx, shop_dy),
+            "cancel_button": _shift(reference.cancel_button, shop_dx, shop_dy),
             "offline_button": _shift(reference.offline_button, shop_dx, shop_dy),
             "bag_probe": _shift(reference.bag_probe, bag_dx, bag_dy),
             "bag_grid": base.bag_grid.model_copy(

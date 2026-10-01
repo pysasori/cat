@@ -15,7 +15,6 @@ from app.game_state import detect_free_funds
 from app.input import InputDriver, make_input
 from app.inventory import (
     InventoryStack,
-    dialog_quantity_count,
     dialog_quantity_pixels,
     scan_templates,
 )
@@ -483,11 +482,21 @@ class ShopRunner:
         lots: list[Lot],
         config: AppConfig,
         inventory_stacks: dict[str, list[InventoryStack]] | None = None,
-    ) -> None:
+        maximum_minus_one: dict[str, int] | None = None,
+    ) -> list[Lot]:
         self._set(stage="filling")
         sale_index = buy_index = 0
+        filled: list[Lot] = []
+        failed_quantity_icons: set[str] = set()
         for position, lot in enumerate(lots, start=1):
             self._check_stop()
+            if lot.side is LotSide.BUY and lot.icon_file in failed_quantity_icons:
+                self._log(
+                    f"{lot.name}: пропускаю скупку, бо точну кількість товару прочитати не вдалося"
+                )
+                continue
+            if lot.quantity < 1:
+                continue
             target_grid = config.geometry.sale_grid if lot.side is LotSide.SALE else config.geometry.buy_grid
             target_index = sale_index if lot.side is LotSide.SALE else buy_index
             if target_index >= target_grid.count:
@@ -529,6 +538,126 @@ class ShopRunner:
             else:
                 known_stacks = (inventory_stacks or {}).get(lot.icon_file)
                 if known_stacks is not None:
+                    dynamic_maximum = (maximum_minus_one or {}).get(lot.icon_file)
+                    sale_slot_count = config.geometry.bag_grid.count // 2
+                    top_stacks = [
+                        stack for stack in known_stacks if stack.match.index < sale_slot_count
+                    ]
+                    if dynamic_maximum is not None:
+                        if not top_stacks:
+                            self._log(f"{lot.name}: немає товару у верхній половині — продаж пропускаю")
+                            continue
+                        # Drag once, read the exact Maximum, then finish this same
+                        # dialog with Maximum - 1. PW tooltips are not involved.
+                        primary = top_stacks[0]
+                        before_dialog = self._wait_for_panels(capture, config)
+                        self._require_item_at(
+                            before_dialog,
+                            template,
+                            primary.match.point,
+                            config.match_threshold,
+                            lot.name,
+                        )
+                        self._require_slot_state(
+                            before_dialog,
+                            target_grid,
+                            target_index,
+                            False,
+                            f"лот продажу {lot.name}",
+                        )
+                        input_driver.drag(
+                            primary.match.point.x,
+                            primary.match.point.y,
+                            target.x,
+                            target.y,
+                        )
+                        self._sleep(config.dialogs.open_delay)
+                        try:
+                            self._require_dialog(
+                                capture,
+                                config,
+                                config.geometry.dialog_accept,
+                                before_dialog,
+                            )
+                            maximum = config.geometry.dialog_maximum
+                            input_driver.click(maximum.x, maximum.y)
+                            self._sleep(config.dialogs.field_delay)
+                            dialog = self._require_dialog(
+                                capture,
+                                config,
+                                config.geometry.dialog_accept,
+                                before_dialog,
+                            )
+                            stack_quantity = dialog_quantity_pixels(
+                                dialog,
+                                config.geometry.dialog_quantity,
+                            )
+                        except InterruptedError:
+                            raise
+                        except RuntimeError as error:
+                            input_driver.press("esc")
+                            self._sleep(max(0.35, config.dialogs.field_delay))
+                            self._wait_for_panels(capture, config)
+                            failed_quantity_icons.add(lot.icon_file)
+                            self._log(
+                                f"{lot.name}: не прочитав кількість ({error}); "
+                                "ввід скасовано, лот пропущено"
+                            )
+                            continue
+
+                        # Later purchase uses the exact primary stack count. Other
+                        # detected cells remain conservative singleton samples.
+                        owned = stack_quantity + max(0, len(known_stacks) - 1)
+                        requested_buy = max(0, dynamic_maximum - owned)
+                        for pending in lots[position:]:
+                            if pending.side is LotSide.BUY and pending.icon_file == lot.icon_file:
+                                pending.quantity = min(pending.quantity, requested_buy)
+                                break
+                        if stack_quantity <= 1:
+                            input_driver.press("esc")
+                            self._sleep(max(0.35, config.dialogs.field_delay))
+                            self._wait_for_panels(capture, config)
+                            self._log(f"{lot.name}: у стеку одна штука — продаж пропущено")
+                            continue
+
+                        lot.quantity = stack_quantity - 1
+                        self._log(
+                            f"{lot.name}: Максимум {stack_quantity}, продаю {lot.quantity}, "
+                            "одну штуку залишаю для скупки"
+                        )
+                        try:
+                            self._fill_dialog(
+                                capture,
+                                input_driver,
+                                lot,
+                                config,
+                                quantity=lot.quantity,
+                                before=before_dialog,
+                            )
+                        except InterruptedError:
+                            raise
+                        except RuntimeError as error:
+                            input_driver.press("esc")
+                            self._sleep(max(0.35, config.dialogs.field_delay))
+                            self._wait_for_panels(capture, config)
+                            failed_quantity_icons.add(lot.icon_file)
+                            self._log(
+                                f"{lot.name}: PW не прийняла діалог ({error}); "
+                                "ввід скасовано, лот пропущено"
+                            )
+                            continue
+                        after = self._wait_for_panels(capture, config)
+                        self._require_item_at(
+                            after,
+                            template,
+                            target,
+                            config.match_threshold,
+                            f"створений лот {lot.name}",
+                        )
+                        sale_index += 1
+                        filled.append(lot)
+                        self._sleep(config.action_delay)
+                        continue
                     sources = sale_stack_plan(
                         known_stacks,
                         config.geometry.bag_grid.count // 2,
@@ -658,6 +787,7 @@ class ShopRunner:
                         f"створений лот {lot.name}",
                     )
                     sale_index += 1
+                    filled.append(lot)
                     self._sleep(config.action_delay)
                     continue
                 else:
@@ -698,6 +828,7 @@ class ShopRunner:
                 sale_index += 1
             else:
                 buy_index += 1
+            filled.append(lot)
             self._sleep(config.action_delay)
 
         self._set(stage="finishing")
@@ -732,7 +863,7 @@ class ShopRunner:
             try:
                 after_first = capture.grab()
             except Exception:
-                return
+                return filled
             if locate_shop(after_first) is None:
                 # The first click was accepted and PW is transitioning to the
                 # offline client. Never click the now-missing button again.
@@ -741,7 +872,7 @@ class ShopRunner:
                     try:
                         capture.grab()
                     except Exception:
-                        return
+                        return filled
                     if time.monotonic() >= deadline:
                         raise RuntimeError(
                             "офлайн-лавка почала запуск, але ігрове вікно не закрилося"
@@ -762,116 +893,7 @@ class ShopRunner:
                 self._sleep(0.50)
         else:
             self._log("офлайн-лавку не натискаю (тестовий режим)")
-
-    def _measure_sale_quantities(
-        self,
-        capture: WindowCapture,
-        driver: InputDriver,
-        config: AppConfig,
-        stacks: dict[str, list[InventoryStack]],
-        templates: dict[str, Image.Image],
-        item_names: dict[str, str],
-        item_ids: list[str],
-    ) -> dict[str, list[InventoryStack]]:
-        """Read exact two-sided stack sizes through sale Maximum, then cancel."""
-        sale_slot_count = config.geometry.bag_grid.count // 2
-        initial = self._wait_for_panels(capture, config)
-        occupied_sale = set(occupied_shop_grid_indexes(initial, config.geometry.sale_grid))
-        target_index = next(
-            (
-                index
-                # The lower half is rendered as red locked cells on this client.
-                for index in range(config.geometry.sale_grid.count // 2)
-                if index not in occupied_sale
-            ),
-            None,
-        )
-        if target_index is None:
-            raise RuntimeError("немає вільного лота продажу для читання «Максимум»")
-        target = config.geometry.sale_grid.point(target_index)
-        measured = {item_id: list(values) for item_id, values in stacks.items()}
-        for item_id in item_ids:
-            template = templates[item_id]
-            name = item_names[item_id]
-            updated: list[InventoryStack] = []
-            for stack in measured.get(item_id, []):
-                if stack.match.index >= sale_slot_count:
-                    updated.append(stack)
-                    continue
-                before = self._wait_for_panels(capture, config)
-                self._require_item_at(
-                    before,
-                    template,
-                    stack.match.point,
-                    config.match_threshold,
-                    name,
-                )
-                self._require_slot_state(
-                    before,
-                    config.geometry.sale_grid,
-                    target_index,
-                    False,
-                    "тимчасовий лот для читання кількості",
-                )
-                driver.drag(
-                    stack.match.point.x,
-                    stack.match.point.y,
-                    target.x,
-                    target.y,
-                )
-                self._sleep(config.dialogs.open_delay)
-                opened = False
-                try:
-                    self._require_dialog(capture, config, config.geometry.dialog_accept, before)
-                    opened = True
-                    maximum = config.geometry.dialog_maximum
-                    driver.click(maximum.x, maximum.y)
-                    self._sleep(config.dialogs.field_delay)
-                    dialog = self._require_dialog(
-                        capture,
-                        config,
-                        config.geometry.dialog_accept,
-                        before,
-                    )
-                    quantity = dialog_quantity_pixels(dialog, config.geometry.dialog_quantity)
-                    try:
-                        tesseract_quantity = dialog_quantity_count(
-                            dialog, config.geometry.dialog_quantity
-                        )
-                    except RuntimeError as error:
-                        self._log(
-                            f"{name}: Tesseract не прочитав «Максимум» ({error}); "
-                            f"піксельний шрифт PW дав {quantity}"
-                        )
-                    else:
-                        if tesseract_quantity != quantity:
-                            self._log(
-                                f"{name}: Tesseract дав {tesseract_quantity}, "
-                                f"піксельний шрифт PW дав {quantity}; використовую {quantity}"
-                            )
-                finally:
-                    if opened:
-                        driver.press("esc")
-                        self._sleep(max(0.35, config.dialogs.field_delay))
-                after = self._wait_for_panels(capture, config)
-                self._require_item_at(
-                    after,
-                    template,
-                    stack.match.point,
-                    config.match_threshold,
-                    f"повернений стек {name}",
-                )
-                self._require_slot_state(
-                    after,
-                    config.geometry.sale_grid,
-                    target_index,
-                    False,
-                    "тимчасовий лот після скасування",
-                )
-                updated.append(InventoryStack(match=stack.match, quantity=quantity))
-                self._log(f"{name}: «Максимум» у продажі = {quantity}")
-            measured[item_id] = updated
-        return measured
+        return filled
 
     def _run_profile(
         self,
@@ -976,7 +998,7 @@ class ShopRunner:
             driver = self._guard_driver(capture, raw_driver, config)
             self._set(stage="returning")
             self._log("Повертаю предмети з поточної лавки для перевиставлення")
-            self._return_existing_lots(capture, driver, config)
+            self._return_existing_lots(capture, driver, config, raw_driver)
             config = self._open_windows(capture, raw_driver, config)
             driver = self._guard_driver(capture, raw_driver, config)
 
@@ -992,7 +1014,11 @@ class ShopRunner:
         exact_quantity_ids = [
             entry.item_id
             for entry in entries
-            if entry.sale_enabled and entry.buy_enabled
+            if (
+                entry.sale_enabled
+                and entry.buy_enabled
+                and entry_prices[entry.item_id][1] is not None
+            )
         ]
         tooltip_driver = None
         previous_foreground = None
@@ -1037,17 +1063,6 @@ class ShopRunner:
                             win32gui.SetForegroundWindow(previous_foreground)
                         except win32gui.error:
                             win32gui.BringWindowToTop(previous_foreground)
-        if not dry_run and exact_quantity_ids:
-            self._log("Читаю точні кількості двосторонніх товарів через продаж → «Максимум»")
-            stacks = self._measure_sale_quantities(
-                capture,
-                driver,
-                config,
-                stacks,
-                templates,
-                {item_id: catalog[item_id].name for item_id in exact_quantity_ids},
-                exact_quantity_ids,
-            )
         funds_frame = capture.grab() if dry_run else self._wait_for_panels(capture, config)
         free_funds = detect_free_funds(
             funds_frame,
@@ -1083,6 +1098,10 @@ class ShopRunner:
                 config.geometry.bag_grid.count // 2,
                 item.stack_limit,
             )
+            if not dry_run and entry.item_id in exact_quantity_ids and top_owned:
+                # Marker only. The exact quantity is read after this stack is
+                # dragged into its final sale slot, so it is never dragged twice.
+                sale_quantity = 1
             buy_price = entry_prices[entry.item_id][1]
             if buy_quantity and owned < 1:
                 missing_buy_samples.append(item.name)
@@ -1162,10 +1181,28 @@ class ShopRunner:
             catalog[item_id].icon_file: item_stacks
             for item_id, item_stacks in stacks.items()
         }
-        self._fill_lots(capture, driver, lots, config, inventory_stacks)
+        maximum_minus_one = {
+            catalog[entry.item_id].icon_file: entry.max_owned
+            for entry in entries
+            if entry.item_id in exact_quantity_ids
+        }
+        filled_lots = self._fill_lots(
+            capture,
+            driver,
+            lots,
+            config,
+            inventory_stacks,
+            maximum_minus_one,
+        )
+        # Some tests and third-party integrations replace the filler with a
+        # legacy callback that returns None.
+        if filled_lots is None:
+            filled_lots = lots
         if character:
             sale_value = sum(
-                lot.price * lot.quantity for lot in lots if lot.side is LotSide.SALE
+                lot.price * lot.quantity
+                for lot in filled_lots
+                if lot.side is LotSide.SALE
             )
             updates = {
                 "sale_value": sale_value,
@@ -1383,18 +1420,18 @@ class ShopRunner:
         capture: WindowCapture,
         driver: InputDriver,
         config: AppConfig,
+        reopen_driver: InputDriver | None = None,
     ) -> None:
         grids = (config.geometry.sale_grid, config.geometry.buy_grid)
         maximum_attempts = sum(grid.count for grid in grids) + 4
         returned = 0
-        ignored: set[tuple[int, int]] = set()
+        reopened_inactive_shop = False
         for _ in range(maximum_attempts):
             frame = self._wait_for_panels(capture, config)
             occupied = [
                 (grid_number, grid, index)
                 for grid_number, grid in enumerate(grids)
                 for index in occupied_shop_grid_indexes(frame, grid)
-                if (grid_number, index) not in ignored
             ]
             if not occupied:
                 if returned:
@@ -1402,26 +1439,50 @@ class ShopRunner:
                 else:
                     self._log("Старих лотів немає")
                 return
+            # Return first, before touching a slot: PW may keep the first old
+            # lot selected. Clicking it again toggles that selection off.
+            button = config.geometry.return_button
+            driver.click(button.x, button.y)
+            self._sleep(max(0.8, config.action_delay))
+            after_direct = self._wait_for_panels(capture, config)
+            remaining = [
+                (grid_number, grid, index)
+                for grid_number, grid in enumerate(grids)
+                for index in occupied_shop_grid_indexes(after_direct, grid)
+            ]
+            if len(remaining) < len(occupied):
+                returned += len(occupied) - len(remaining)
+                continue
+
+            if not reopened_inactive_shop:
+                # In an active cat shop, "Return" does not change configured
+                # lots. Cancel closes that shop; reopening F1 makes Return clear
+                # all old sale/buy entries. This also avoids toggling an already
+                # selected first lot off.
+                cancel = config.geometry.cancel_button
+                driver.click(cancel.x, cancel.y)
+                self._sleep(max(0.8, config.action_delay))
+                raw = reopen_driver or driver
+                config = self._open_windows(capture, raw, config)
+                driver = (
+                    self._guard_driver(capture, raw, config)
+                    if reopen_driver is not None
+                    else raw
+                )
+                grids = (config.geometry.sale_grid, config.geometry.buy_grid)
+                reopened_inactive_shop = True
+                continue
+
             grid_number, grid, index = occupied[0]
             slot = grid.point(index)
             driver.click(slot.x, slot.y)
             self._sleep(0.2)
-            selected = self._wait_for_panels(capture, config)
-            slot_box = (
-                max(0, slot.x - 16),
-                max(0, slot.y - 16),
-                min(selected.width, slot.x + 16),
-                min(selected.height, slot.y + 16),
-            )
-            if image_changed(frame, selected, slot_box) < 1.0:
-                ignored.add((grid_number, index))
-                continue
-            button = config.geometry.return_button
+            self._wait_for_panels(capture, config)
             driver.click(button.x, button.y)
             self._sleep(max(0.8, config.action_delay))
             after = self._wait_for_panels(capture, config)
             if index in occupied_shop_grid_indexes(after, grid):
-                raise RuntimeError("Безпечна зупинка: лот не повернувся у рюкзак")
+                raise RuntimeError("Безпечна зупинка: старий лот не повернувся у рюкзак")
             returned += 1
         raise RuntimeError("не вдалося повернути всі старі лоти в рюкзак")
 
