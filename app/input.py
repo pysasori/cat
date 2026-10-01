@@ -33,8 +33,22 @@ def virtual_key(key: str) -> int:
         raise ValueError(f"невідома клавіша {key!r}") from error
 
 
+EXTENDED_KEYS = {
+    win32con.VK_DOWN,
+    win32con.VK_UP,
+    win32con.VK_LEFT,
+    win32con.VK_RIGHT,
+    win32con.VK_HOME,
+    win32con.VK_END,
+    win32con.VK_INSERT,
+    win32con.VK_DELETE,
+}
+
+
 def key_lparam(vk: int, down: bool) -> int:
     value = 1 | (_user32.MapVirtualKeyW(vk, 0) << 16)
+    if vk in EXTENDED_KEYS:
+        value |= 1 << 24
     if not down:
         value |= (1 << 30) | (1 << 31)
     return value

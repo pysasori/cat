@@ -887,17 +887,57 @@ class ShopRunner:
         if previous == (0, 0, b""):
             raise RuntimeError("поле кількості порожнє після «Максимум»")
         quantity = 1
+        active_driver = driver
+        allow_foreground = config.input_mode is InputMode.BACKGROUND
         for _attempt in range(stack_limit):
-            driver.press("down")
-            self._sleep(0.08)
-            current = dialog_quantity_signature(capture.grab(), point)
-            if current == previous:
+            current, active_driver, changed = self._decrement_dialog_quantity(
+                capture,
+                active_driver,
+                config,
+                previous,
+                allow_foreground=allow_foreground,
+            )
+            # If the first background Down changed the field, later equality
+            # means we genuinely reached 1 and must not steal foreground focus.
+            allow_foreground = False
+            if not changed:
                 return quantity
             quantity += 1
             previous = current
         raise RuntimeError(
             f"кількість у стеку перевищила налаштований ліміт {stack_limit}"
         )
+
+    def _decrement_dialog_quantity(
+        self,
+        capture: WindowCapture,
+        driver: InputDriver,
+        config: AppConfig,
+        previous: tuple[int, int, bytes],
+        *,
+        allow_foreground: bool,
+    ) -> tuple[tuple[int, int, bytes], InputDriver, bool]:
+        """Press Down and verify the rendered quantity actually changed."""
+        point = config.geometry.dialog_quantity
+        driver.press("down")
+        self._sleep(0.10)
+        current = dialog_quantity_signature(capture.grab(), point)
+        if current != previous:
+            return current, driver, True
+        if not allow_foreground:
+            return current, driver, False
+
+        foreground = self._guard_driver(
+            capture,
+            make_input(InputMode.FOREGROUND, capture.hwnd, config.drag_duration),
+            config,
+        )
+        self._log("PW не прийняла фоновий ↓ — повторюю його фізично")
+        foreground.click(point.x, point.y)
+        foreground.press("down")
+        self._sleep(0.10)
+        current = dialog_quantity_signature(capture.grab(), point)
+        return current, foreground, current != previous
 
     def _run_profile(
         self,
@@ -1478,8 +1518,19 @@ class ShopRunner:
             self._sleep(config.dialogs.field_delay)
             quantity_point = config.geometry.dialog_quantity
             driver.click(quantity_point.x, quantity_point.y)
-            driver.press("down")
-            self._sleep(config.dialogs.field_delay)
+            self._sleep(0.10)
+            previous = dialog_quantity_signature(capture.grab(), quantity_point)
+            _current, _driver, changed = self._decrement_dialog_quantity(
+                capture,
+                driver,
+                config,
+                previous,
+                allow_foreground=config.input_mode is InputMode.BACKGROUND,
+            )
+            if not changed:
+                raise RuntimeError(
+                    f"{lot.name}: не вдалося зменшити «Максимум» на 1; лот не підтверджено"
+                )
         else:
             self._replace_dialog_value(
                 capture,

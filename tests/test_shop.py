@@ -241,6 +241,8 @@ def test_maximum_minus_one_dialog_uses_down_arrow_instead_of_typing(tmp_path, mo
         ("replace", point, value)
     )
     monkeypatch.setattr(shop, "image_changed", lambda *_: 99.0)
+    signatures = iter(((1, 1, b"maximum"), (1, 1, b"maximum-minus-one")))
+    monkeypatch.setattr(shop, "dialog_quantity_signature", lambda *_: next(signatures))
 
     runner._fill_dialog(
         Capture(),
@@ -256,6 +258,48 @@ def test_maximum_minus_one_dialog_uses_down_arrow_instead_of_typing(tmp_path, mo
     assert ("click", config.geometry.dialog_quantity.x, config.geometry.dialog_quantity.y) in events
     assert ("press", "down") in events
     assert not any(event[0] == "replace" and event[1] == config.geometry.dialog_quantity for event in events)
+
+
+def test_down_arrow_retries_in_foreground_when_background_is_ignored(tmp_path, monkeypatch):
+    runner = ShopRunner(Repository(tmp_path))
+    config = AppConfig()
+    previous = (1, 1, b"same")
+    signatures = iter((previous, (1, 1, b"changed")))
+    background_events = []
+    foreground_events = []
+
+    class Capture:
+        hwnd = 123
+
+        def grab(self):
+            return object()
+
+    class Driver:
+        def __init__(self, events):
+            self.events = events
+
+        def click(self, x, y):
+            self.events.append(("click", x, y))
+
+        def press(self, key):
+            self.events.append(("press", key))
+
+    background = Driver(background_events)
+    foreground = Driver(foreground_events)
+    runner._sleep = lambda _: None
+    runner._guard_driver = lambda _capture, driver, _config: driver
+    monkeypatch.setattr(shop, "make_input", lambda *_: foreground)
+    monkeypatch.setattr(shop, "dialog_quantity_signature", lambda *_: next(signatures))
+
+    current, used_driver, changed = runner._decrement_dialog_quantity(
+        Capture(), background, config, previous, allow_foreground=True
+    )
+
+    assert changed is True
+    assert current == (1, 1, b"changed")
+    assert used_driver is foreground
+    assert background_events == [("press", "down")]
+    assert foreground_events[-1] == ("press", "down")
 
 
 def test_offline_trade_confirms_shop_before_starting_offline_mode(tmp_path):
